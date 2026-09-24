@@ -65,6 +65,7 @@ pub struct Preferences {
     pub remember_window_geometry: bool,
     pub theme: Theme,
     pub sync_editor_appearance: bool,
+    pub app_icon: String,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -72,6 +73,7 @@ impl Default for Preferences {
             remember_window_geometry: true,
             theme: Theme::System,
             sync_editor_appearance: false,
+            app_icon: crate::icons::DEFAULT_ICON_ID.into(),
         }
     }
 }
@@ -105,11 +107,28 @@ mod tests {
     fn preferences_preserve_defaults_and_follow_system() {
         let p: Preferences = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
         assert!(p.remember_window_geometry);
+        assert_eq!(p.app_icon, crate::icons::DEFAULT_ICON_ID);
         assert!(!p.sync_editor_appearance);
         assert!(p.theme.is_dark(false));
         assert!(!Theme::Light.is_dark(true));
         assert!(Theme::System.is_dark(true));
         assert!(!Theme::System.is_dark(false));
+    }
+    #[test]
+    fn unknown_icon_preserves_other_preferences_and_falls_back() {
+        let p: Preferences = serde_json::from_str(
+            r#"{"app_icon":"future-icon","theme":"light","remember_window_geometry":false}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            crate::icons::resolve(&p.app_icon).id,
+            crate::icons::DEFAULT_ICON_ID
+        );
+        assert_eq!(p.theme, Theme::Light);
+        assert!(!p.remember_window_geometry);
+        let roundtrip: Preferences =
+            serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!(roundtrip.app_icon, "future-icon");
     }
     #[test]
     fn preferences_roundtrip_independently_of_geometry() {
@@ -120,6 +139,7 @@ mod tests {
             theme: Theme::Light,
             remember_window_geometry: false,
             sync_editor_appearance: true,
+            app_icon: crate::icons::DEFAULT_ICON_ID.into(),
         };
         p.save_to(&dir).unwrap();
         assert_eq!(Preferences::load_from(&dir).unwrap(), p);

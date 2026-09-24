@@ -1,0 +1,13 @@
+Neovim logo by Jason Long, licensed under Creative Commons Attribution 3.0 Unported.
+Source and attribution: https://neovim.io/ (Marketing)
+Author: https://twitter.com/jasonlong
+Licence: https://creativecommons.org/licenses/by/3.0/
+Legal code: https://creativecommons.org/licenses/by/3.0/legalcode
+
+Upstream artwork: https://neovim.io/logos/neovim-logos.zip
+Archive SHA-256: c899d052fb8c31b124746fc33bde5a23ff8b02d323b42a0dd8dd66b57b81d20d
+Original neovim-mark.png SHA-256: 6b6475b49ee1ae78ff6aa2312a5e7d43f5d296c80d395630299aa0e655382b02
+
+Changes: scaled and centred on a transparent square canvas; exported at macOS icon sizes.
+The mark itself is unchanged. Zvim is an independent Neovim frontend, not an official
+Neovim application or an endorsement by Neovim or the logo's author.

@@ -7,6 +7,7 @@ def module(name, path):
     spec=importlib.util.spec_from_file_location(name,path);mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod);return mod
 
 def main():
+    version=module('version',ROOT/'scripts/version.py').version()
     bundle=module('bundle',ROOT/'scripts/bundle-neovim.py')
     licenses=module('licenses',ROOT/'scripts/licenses.py')
     parser=argparse.ArgumentParser();parser.add_argument('--target',default=bundle.host());parser.add_argument('--debug',action='store_true');args=parser.parse_args()
@@ -21,7 +22,8 @@ def main():
     if platform.system()=='Darwin':
         app=dest/'Zvim.app';contents=app/'Contents';exe_dir=contents/'MacOS';resources=contents/'Resources'
         exe_dir.mkdir(parents=True);resources.mkdir();shutil.copy2(binary,exe_dir/'zvim')
-        plist={'CFBundleName':'Zvim','CFBundleDisplayName':'Zvim','CFBundleIdentifier':'dev.zvim.Zvim','CFBundleVersion':'1','CFBundleShortVersionString':'0.1.0','CFBundleExecutable':'zvim','CFBundlePackageType':'APPL','NSHighResolutionCapable':True,'LSMinimumSystemVersion':'12.0','CFBundleDocumentTypes':[{'CFBundleTypeName':'Text document','CFBundleTypeRole':'Editor','LSHandlerRank':'Alternate','LSItemContentTypes':['public.text','public.source-code']} ]}
+        module('macos_icon',ROOT/'scripts/macos-icon.py').build(resources/'Zvim.icns')
+        plist={'CFBundleName':'Zvim','CFBundleDisplayName':'Zvim','CFBundleIdentifier':'dev.zvim.Zvim','CFBundleVersion':version.split('-')[0].split('+')[0],'CFBundleShortVersionString':version.split('-')[0].split('+')[0],'CFBundleExecutable':'zvim','CFBundlePackageType':'APPL','CFBundleIconFile':'Zvim.icns','NSHighResolutionCapable':True,'LSMinimumSystemVersion':'12.0','CFBundleDocumentTypes':[{'CFBundleTypeName':'Text document','CFBundleTypeRole':'Editor','LSHandlerRank':'Alternate','LSItemContentTypes':['public.text','public.source-code']} ]}
         with (contents/'Info.plist').open('wb') as f:plistlib.dump(plist,f)
         shutil.copytree(runtime,resources/'neovim');licenses.collect(resources/'licenses');shutil.copy2(ROOT/'LICENSE',resources/'LICENSE');shutil.copy2(ROOT/'scripts/install-cli.py',resources/'install-cli.py')
         # Ad-hoc signing enables local execution, not public Gatekeeper trust.

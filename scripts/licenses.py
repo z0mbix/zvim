@@ -22,3 +22,5 @@ def collect(destination):
             for f in files: shutil.copy2(f,out/f.name)
     (destination/'DEPENDENCIES.md').write_text('\n'.join(notices)+'\n')
     shutil.copy2(ROOT/'packaging/NEOVIM-LICENSE.txt',destination/'NEOVIM-LICENSE.txt')
+
+    shutil.copy2(ROOT/'packaging/NEOVIM-LOGO-NOTICE.txt',destination/'NEOVIM-LOGO-NOTICE.txt')

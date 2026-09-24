@@ -60,6 +60,7 @@ Open **Zvim → Settings…** (`⌘,` on macOS; `Ctrl+Shift+,` elsewhere). Chang
 - **Appearance: System / Light / Dark** styles Zvim controls. System responds to desktop appearance changes; native titlebars continue to follow the OS.
 - **Sync editor appearance**, off by default, also sets Neovim's `background` option. Your colourscheme must support both appearances. NvChad/Base46 palettes are preserved unchanged because changing `background` resets their custom highlights; Zvim does not choose a replacement theme. Disabling sync restores the background from before sync was enabled unless you changed it yourself in Neovim. No configuration files are edited.
 - **Remember window size and position**, on by default, reuses the last saved editor-window placement. Turning it off opens new windows centred at the default size and stops saving geometry. This does not restore files, sessions, or multiple window layouts.
+- **Application icon** previews the bundled Neovim mark. The saved `app_icon` ID is `neovim`; this release has one choice. Unknown IDs fall back to it without losing other settings. Additional artwork and platform switching can be added later. The macOS bundle embeds the icon for Finder, the Dock and the app switcher.
 - **Open diagnostics folder** reveals the directory containing settings and startup/editor logs.
 
 Preferences live in `preferences.json`, separate from `window.json`. Changes apply to open windows in the same instance; independently launched instances reload preferences when activated. Font and plugin settings remain in Neovim.
@@ -103,3 +104,25 @@ See [architecture](docs/ARCHITECTURE.md) and [validation](docs/VALIDATION.md). I
 ## Licences
 
 Original Zvim code is Apache-2.0. GPUI is used as a pinned library; no Zed editor/application code is imported. Packaging preserves the upstream Neovim licence/runtime and collects available licence files and declared licence expressions for resolved Rust dependencies. Release maintainers must review that inventory when updating dependencies. See [third-party notes](THIRD_PARTY_NOTICES.md).
+
+## Releases
+
+Download builds from [GitHub Releases](https://github.com/z0mbix/zvim/releases).
+Versions follow SemVer, starting at **0.0.1**. To publish a release:
+
+1. Update the package version in `Cargo.toml` and refresh `Cargo.lock` with `cargo check`.
+2. Update `docs/RELEASE_NOTES.md`, run the checks, and commit the changes.
+3. Push the commit and a matching annotated tag, for example:
+
+   ```sh
+   git push origin main
+   git tag -a v0.0.1 -m 'Zvim v0.0.1'
+   git push origin v0.0.1
+   ```
+
+GitHub Actions rejects tags that do not match the package version. All four platform
+builds must pass before it publishes versioned archives and `SHA256SUMS.txt`.
+SemVer tags containing a prerelease suffix publish as GitHub prereleases. The release
+is staged as a draft until all assets upload; failed jobs can be rerun.
+The macOS bundle version is derived from Cargo's version. Public signing and
+notarisation are not configured.

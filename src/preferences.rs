@@ -1,4 +1,6 @@
 use gpui::{prelude::*, *};
+use std::sync::Arc;
+use zvim::icons::{APP_ICONS, resolve};
 use zvim::settings::{Preferences, Theme};
 
 pub struct AppPreferences(pub Preferences);
@@ -24,12 +26,14 @@ enum Choice {
     Geometry,
     Sync,
     Diagnostics,
+    Icon(&'static str),
 }
 
 pub struct PreferencesView {
     focus: FocusHandle,
     buttons: Vec<FocusHandle>,
     error: Option<String>,
+    icon_images: std::collections::HashMap<&'static str, Arc<Image>>,
 }
 impl PreferencesView {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -42,8 +46,17 @@ impl PreferencesView {
         cx.observe_window_activation(window, |_, _, cx| refresh(cx))
             .detach();
         Self {
+            icon_images: APP_ICONS
+                .iter()
+                .map(|icon| {
+                    (
+                        icon.id,
+                        Arc::new(Image::from_bytes(ImageFormat::Png, icon.png.to_vec())),
+                    )
+                })
+                .collect(),
             focus,
-            buttons: (0..6)
+            buttons: (0..(6 + APP_ICONS.len()) as isize)
                 .map(|i| cx.focus_handle().tab_index(i).tab_stop(true))
                 .collect(),
             error: Preferences::load()
@@ -65,6 +78,7 @@ impl PreferencesView {
             let mut p = Preferences::load()?;
             match choice {
                 Choice::Theme(theme) => p.theme = theme,
+                Choice::Icon(id) => p.app_icon = id.into(),
                 Choice::Geometry => p.remember_window_geometry = !p.remember_window_geometry,
                 Choice::Sync => p.sync_editor_appearance = !p.sync_editor_appearance,
                 Choice::Diagnostics => unreachable!(),
@@ -86,7 +100,7 @@ impl PreferencesView {
         choice: Choice,
         is_dark: bool,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    ) -> impl IntoElement + use<> {
         let focus = self.buttons[index].clone();
         div()
             .id(index)
@@ -163,8 +177,16 @@ impl Render for PreferencesView {
                     .child(self.button(4, if p.remember_window_geometry {"On"} else {"Off"},p.remember_window_geometry,Choice::Geometry,d,cx)))
                 .child(div().text_color(muted).child("New windows use the last saved placement. When off, they open centred at the default size. Files and sessions are not restored.")))
             .child(div().flex().flex_col().gap_3()
+                .child(div().font_weight(FontWeight::SEMIBOLD).child("Application icon"))
+                .child(div().flex().items_center().gap_4()
+                    .child(img(self.icon_images[resolve(&p.app_icon).id].clone())
+                        .w(px(64.)).h(px(64.)))
+                    .children(APP_ICONS.iter().enumerate().map(|(i, icon)|
+                        self.button(5+i, icon.label, resolve(&p.app_icon).id == icon.id, Choice::Icon(icon.id), d, cx))))
+                .child(div().text_color(muted).child("The Neovim icon is included in this build. More icon choices can be added in future releases.")))
+            .child(div().flex().flex_col().gap_3()
                 .child(div().font_weight(FontWeight::SEMIBOLD).child("Troubleshooting"))
-                .child(div().flex().child(self.button(5,"Open diagnostics folder",false,Choice::Diagnostics,d,cx))))
+                .child(div().flex().child(self.button(5+APP_ICONS.len(),"Open diagnostics folder",false,Choice::Diagnostics,d,cx))))
             .child(div().text_sm().text_color(muted).child("Changes save automatically. Fonts, plugins and editing preferences stay in your Neovim configuration."))
             .when_some(self.error.clone(), |d,e| d.child(div().text_color(rgb(0xd75b65)).child(e)))
     }
