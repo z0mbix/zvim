@@ -34,10 +34,6 @@ jobs:
             target: macos-arm64
           - os: macos-15-intel
             target: macos-x86_64
-          - os: ubuntu-24.04
-            target: linux-x86_64
-          - os: windows-2022
-            target: windows-x86_64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -51,9 +47,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - name: Linux system dependencies
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y build-essential clang cmake pkg-config libasound2-dev libfontconfig1-dev libfreetype6-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb1-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxinerama-dev libxkbcommon-dev libvulkan-dev libssl-dev libzstd-dev
       - run: python scripts/test_package.py
       - run: python scripts/bundle-neovim.py --target ${{ matrix.target }}
       - run: cargo fmt --check
@@ -89,8 +82,7 @@ jobs:
           import hashlib, os, pathlib
           folder = pathlib.Path('release')
           files = sorted(folder.iterdir())
-          expected = {'zvim-macos-arm64.zip', 'zvim-macos-x86_64.zip',
-                      'zvim-linux-x86_64.tar.gz', 'zvim-windows-x86_64.zip'}
+          expected = {'zvim-macos-arm64.zip', 'zvim-macos-x86_64.zip'}
           assert {p.name for p in files} == expected, 'Missing or unexpected release archives'
           checksums = []
           for file in files:

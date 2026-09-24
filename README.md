@@ -2,7 +2,7 @@
 
 A focused native frontend for Neovim, written in Rust with GPUI. Neovim owns editing, splits, plugins, LSP, and configuration. Zvim draws the screen and integrates input, clipboard, windows, and file opening with the desktop.
 
-**Status: macOS prototype, not a cross-platform v1 release.** The macOS build and bundled-editor tests have been exercised locally. Linux/Windows build and packaging jobs are provided but require CI execution and runtime QA. See [validation](docs/VALIDATION.md).
+**Status: macOS prototype, not a cross-platform v1 release.** The macOS build and bundled-editor tests have been exercised locally. Linux/Windows source and packaging support remain experimental; current CI and releases target macOS. See [validation](docs/VALIDATION.md).
 
 ## Run on macOS
 
@@ -92,9 +92,9 @@ Run the bundling step before tests. The integration tests use real bundled Neovi
 
 ## Linux and Windows
 
-The GitHub Actions matrix builds macOS arm64/x86-64, Linux x86-64, and Windows x86-64. It runs tests and produces self-contained editor distributions (with host GUI system libraries still required).
+The GitHub Actions matrix builds and tests macOS arm64 and x86-64 and produces self-contained app bundles. Linux and Windows packaging scripts remain available for development, but are not release targets yet.
 
-- Linux: install the development libraries listed in `.github/workflows/build.yml`; use `python3 scripts/bundle-neovim.py`, then `cargo build --release --locked` and `python3 scripts/package.py`. The archive contains `zvim`, `neovim/`, and a desktop entry. Keep the runtime beside the binary; add that directory to PATH before installing the desktop entry under `~/.local/share/applications`. Wayland and X11 backends are enabled.
+- Linux: install the GPUI development dependencies listed in `docs/VALIDATION.md`; use `python3 scripts/bundle-neovim.py`, then `cargo build --release --locked` and `python3 scripts/package.py`. The archive contains `zvim`, `neovim/`, and a desktop entry. Keep the runtime beside the binary; add that directory to PATH before installing the desktop entry under `~/.local/share/applications`. Wayland and X11 backends are enabled.
 - Windows: use the Rust MSVC toolchain, Visual Studio C++ build tools and Windows SDK, Python, and curl. Run the same commands using `python`. Keep `neovim/` beside `zvim.exe` when unpacking the ZIP.
 
 ## Architecture and limitations
@@ -120,7 +120,7 @@ Versions follow SemVer, starting at **0.0.1**. To publish a release:
    git push origin v0.0.1
    ```
 
-GitHub Actions rejects tags that do not match the package version. All four platform
+GitHub Actions rejects tags that do not match the package version. Both macOS
 builds must pass before it publishes versioned archives and `SHA256SUMS.txt`.
 SemVer tags containing a prerelease suffix publish as GitHub prereleases. The release
 is staged as a draft until all assets upload; failed jobs can be rerun.

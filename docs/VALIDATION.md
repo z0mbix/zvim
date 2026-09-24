@@ -35,7 +35,8 @@ This is a macOS prototype with cross-platform source/build infrastructure. Do no
 
 ## Still required before v1
 
-- Run the GitHub Actions matrix; Linux/Windows/Intel macOS results are not yet available from this machine.
+- Broader interactive testing on Intel macOS. Both macOS architectures have passed CI tests, Clippy, release compilation and packaging.
+- Linux and Windows remain outside the current release scope. CI exercised their tests and builds during initial release preparation; Windows packaging needed a ZIP timestamp fix.
 - Runtime tests on Linux under Wayland and X11, and on Windows with display scaling and AltGr layouts.
 - Comprehensive IME/CJK input and candidate placement, less common font fallbacks, mixed-DPI monitor transitions, drag/drop, and accessibility review.
 - Resolve an intermittent `CmdlineChanged` Lua callback error observed in the existing configuration. It did not reproduce in a separate embedded-editor diagnostic session; its cause is not yet established. Broader plugin workflow compatibility is not certified.
@@ -56,3 +57,11 @@ See [the startup investigation](STARTUP.md) for measured stages, raw samples, an
 ## Picker interaction rendering fix (2026-09-24)
 
 The earlier startup-only changes did not establish a fix for typing/navigation lag. A subsequent native interaction test with ignore rules bypassed reproduced ~179 ms median CPU paints. Process sampling identified per-cell GPUI layer ordering; grouped layers and direct painting of cached shaped glyphs reduced median paint time to ~2.5 ms under the unreduced workload. See [the corrected investigation](STARTUP.md) and its visual QA list.
+
+## Linux development dependencies (Ubuntu 24.04)
+
+For experimental local builds, install:
+
+```sh
+sudo apt-get install build-essential clang cmake pkg-config libasound2-dev libfontconfig1-dev libfreetype6-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb1-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxinerama-dev libxkbcommon-dev libvulkan-dev libssl-dev libzstd-dev
+```
