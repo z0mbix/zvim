@@ -5,6 +5,11 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing version tag to build and publish (leave blank for checks only)
+        required: false
+        type: string
 concurrency:
   group: build-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: false
@@ -15,13 +20,15 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.98.1
       - name: Check release version
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: python3 scripts/version.py "$RELEASE_TAG"
   build:
     needs: validate
@@ -30,7 +37,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-15
             target: macos-arm64
           - os: macos-15-intel
             target: macos-x86_64
@@ -39,6 +46,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.98.1
@@ -46,6 +55,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Select Xcode SDK for Ghostty
+        if: runner.os == 'macOS'
+        run: sudo xcode-select --switch /Applications/Xcode_26.3.app/Contents/Developer
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
@@ -70,13 +82,15 @@ jobs:
             dist/*.tar.gz
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
     needs: build
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
       - uses: actions/download-artifact@v4
         with:
           pattern: zvim-macos-*
@@ -84,7 +98,7 @@ jobs:
           merge-multiple: true
       - name: Version archives and generate checksums
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
           python3 - <<'PY'
           import hashlib, os, pathlib
@@ -103,7 +117,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
           extra=()
           if [[ "$RELEASE_TAG" == *-* ]]; then extra+=(--prerelease); fi

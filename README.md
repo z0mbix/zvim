@@ -6,7 +6,7 @@ A focused native frontend for Neovim, written in Rust with GPUI. Neovim owns edi
 
 ## Run on macOS
 
-Requires macOS 13 or newer, Rust 1.98.1, Apple command-line developer tools, Python 3, curl, and Zig 0.16.0. GPUI's runtime Metal shader compilation is enabled, so the separate Xcode Metal compiler component is not required.
+Requires macOS 13 or newer, Rust 1.98.1, Xcode 26.3 (including its macOS SDK), Python 3, curl, and Zig 0.16.0. GPUI's runtime Metal shader compilation is enabled, so the separate Xcode Metal compiler component is not required.
 
 ```sh
 python3 scripts/bundle-neovim.py
