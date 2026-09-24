@@ -1,0 +1,932 @@
+{
+  "date": "2026-09-24",
+  "platform": "macOS arm64",
+  "notes": [
+    "User NvChad config with startup Telescope.find_files in the Zvim project.",
+    "Timings ms are relative to a pre-config --cmd probe; launch_ms, when present, is relative to process creation.",
+    "Initial terminal baseline uses a synthetic PTY with unanswered terminal queries; not a direct user-terminal latency measurement.",
+    "Later PTY runs use NVIM_NOTTYFAST=1 and 221x61 cells to remove query timeouts and approximate GUI size.",
+    "Font-profile samples use a separately signed copy of the release app; first launches have variable macOS initialization cost.",
+    "These are short local samples, not statistically established benchmarks."
+  ],
+  "runs": [
+    {
+      "sample": "zvim-bench-gui-0",
+      "kind": "original_gui",
+      "events": [
+        {
+          "event": "bootstrap",
+          "ms": 0.05125
+        },
+        {
+          "event": "VimEnter",
+          "ms": 25.606042
+        },
+        {
+          "event": "find_pre",
+          "ms": 40.057083
+        },
+        {
+          "event": "prompt",
+          "ms": 42.340667
+        },
+        {
+          "event": "resize",
+          "ms": 395.44375,
+          "extra": [
+            221,
+            59
+          ]
+        },
+        {
+          "event": "complete",
+          "ms": 703.827625,
+          "extra": {
+            "results": 21182
+          }
+        },
+        {
+          "event": "end",
+          "ms": 3999.604875,
+          "extra": {
+            "mode": "i",
+            "messages": ""
+          }
+        }
+      ],
+      "frontend": {}
+    },
+    {
+      "sample": "zvim-bench-gui-1",
+      "kind": "original_gui",
+      "events": [
+        {
+          "ms": 0.04625,
+          "event": "bootstrap"
+        },
+        {
+          "ms": 24.415125,
+          "event": "VimEnter"
+        },
+        {
+          "ms": 44.670708,
+          "event": "find_pre"
+        },
+        {
+          "ms": 47.941042,
+          "event": "prompt"
+        },
+        {
+          "ms": 246.088125,
+          "event": "resize",
+          "extra": [
+            221,
+            61
+          ]
+        },
+        {
+          "ms": 603.392583,
+          "event": "complete",
+          "extra": {
+            "results": 21182
+          }
+        },
+        {
+          "ms": 4000.941083,
+          "event": "end",
+          "extra": {
+            "mode": "i",
+            "messages": ""
+          }
+        }
+      ],
+      "frontend": {}
+    },
+    {
+      "sample": "zvim-bench-terminal-bundled-0",
+      "kind": "original_pty",
+      "events": [
+        {
+          "event": "bootstrap",
+          "ms": 0.13475
+        },
+        {
+          "event": "VimEnter",
+          "ms": 26.25325
+        },
+        {
+          "event": "find_pre",
+          "ms": 40.270667
+        },
+        {
+          "event": "prompt",
+          "ms": 42.2115
+        },
+        {
+          "extra": {
+            "results": 21182
+          },
+          "event": "complete",
+          "ms": 521.577375
+        },
+        {
+          "extra": {
+            "mode": "i",
+            "messages": "\nE1568: Terminal did not respond to DSR request for 'background' color. Startup may be slower. :help 'ttyfast'"
+          },
+          "event": "end",
+          "ms": 3997.782042
+        }
+      ],
+      "frontend": {}
+    },
+    {
+      "sample": "zvim-bench-terminal-bundled-1",
+      "kind": "original_pty",
+      "events": [
+        {
+          "event": "bootstrap",
+          "ms": 0.052042
+        },
+        {
+          "event": "VimEnter",
+          "ms": 23.127958
+        },
+        {
+          "event": "find_pre",
+          "ms": 38.016875
+        },
+        {
+          "event": "prompt",
+          "ms": 39.791667
+        },
+        {
+          "event": "complete",
+          "ms": 520.208417,
+          "extra": {
+            "results": 21182
+          }
+        },
+        {
+          "event": "end",
+          "ms": 4000.575542,
+          "extra": {
+            "mode": "i",
+            "messages": "\nE1568: Terminal did not respond to DSR request for 'background' color. Startup may be slower. :help 'ttyfast'"
+          }
+        }
+      ],
+      "frontend": {}
+    },
+    {
+      "sample": "zvim-bench-terminal-system-0",
+      "kind": "original_pty",
+      "events": [
+        {
+          "ms": 2.408125,
+          "event": "bootstrap"
+        },
+        {
+          "ms": 41.447875,
+          "event": "VimEnter"
+        },
+        {
+          "ms": 64.30725,
+          "event": "find_pre"
+        },
+        {
+          "ms": 66.951167,
+          "event": "prompt"
+        },
+        {
+          "extra": {
+            "results": 21182
+          },
+          "ms": 595.1915,
+          "event": "complete"
+        },
+        {
+          "extra": {
+            "messages": "\nE1568: Terminal did not respond to DSR request for 'background' color. Startup may be slower. :help 'ttyfast'",
+            "mode": "i"
+          },
+          "ms": 3998.832792,
+          "event": "end"
+        }
+      ],
+      "frontend": {}
+    },
+    {
+      "sample": "zvim-bench-terminal-system-1",
+      "kind": "original_pty",
+      "events": [
+        {
+          "event": "bootstrap",
+          "ms": 0.120417
+        },
+        {
+          "event": "VimEnter",
+          "ms": 25.158125
+        },
+        {
+          "event": "find_pre",
+          "ms": 36.842417
+        },
+        {
+          "event": "prompt",
+          "ms": 38.984542
+        },
+        {
+          "extra": {
+            "results": 21182
+          },
+          "event": "complete",
+          "ms": 528.651334
+        },
+        {
+          "extra": {
+            "mode": "i",
+            "messages": "\nE1568: Terminal did not respond to DSR request for 'background' color. Startup may be slower. :help 'ttyfast'"
+          },
+          "event": "end",
+          "ms": 4000.24325
+        }
+      ],
+      "frontend": {}
+    },
+    {
+      "sample": "zvim-bench-ignored-gui-0",
+      "kind": "ignore_only",
+      "events": [
+        {
+          "launch_ms": 240.3557300567627,
+          "event": "bootstrap",
+          "ms": 0.047792
+        },
+        {
+          "launch_ms": 264.9188041687012,
+          "event": "VimEnter",
+          "ms": 24.6125
+        },
+        {
+          "launch_ms": 279.0257930755615,
+          "event": "find_pre",
+          "ms": 38.718792
+        },
+        {
+          "launch_ms": 281.0099124908447,
+          "event": "prompt",
+          "ms": 40.702792
+        },
+        {
+          "extra": {
+            "results": 29
+          },
+          "launch_ms": 442.0657157897949,
+          "event": "complete",
+          "ms": 201.759292
+        },
+        {
+          "extra": [
+            221,
+            63
+          ],
+          "launch_ms": 531.2197208404541,
+          "event": "resize",
+          "ms": 290.921959
+        },
+        {
+          "extra": {
+            "messages": "",
+            "mode": "i"
+          },
+          "launch_ms": 4240.972757339478,
+          "event": "end",
+          "ms": 4000.619459
+        }
+      ],
+      "frontend": {}
+    },
+    {
+      "sample": "zvim-bench-ignored-gui-1",
+      "kind": "ignore_only",
+      "events": [
+        {
+          "event": "bootstrap",
+          "launch_ms": 217.8120613098145,
+          "ms": 0.058375
+        },
+        {
+          "event": "VimEnter",
+          "launch_ms": 243.4430122375488,
+          "ms": 25.69
+        },
+        {
+          "event": "find_pre",
+          "launch_ms": 259.6800327301025,
+          "ms": 41.927042
+        },
+        {
+          "event": "prompt",
+          "launch_ms": 261.9669437408447,
+          "ms": 44.213334
+        },
+        {
+          "extra": {
+            "results": 29
+          },
+          "event": "complete",
+          "launch_ms": 419.3990230560303,
+          "ms": 201.645292
+        },
+        {
+          "extra": [
+            221,
+            64
+          ],
+          "event": "resize",
+          "launch_ms": 461.3909721374512,
+          "ms": 243.642459
+        },
+        {
+          "extra": {
+            "mode": "i",
+            "messages": ""
+          },
+          "event": "end",
+          "launch_ms": 4218.193054199219,
+          "ms": 4000.387834
+        }
+      ],
+      "frontend": {}
+    },
+    {
+      "sample": "zvim-bench-ignored-terminal-bundled-0",
+      "kind": "ignore_only",
+      "events": [
+        {
+          "launch_ms": 44.75998878479004,
+          "ms": 0.075,
+          "event": "bootstrap"
+        },
+        {
+          "launch_ms": 73.71306419372559,
+          "ms": 29.027291,
+          "event": "VimEnter"
+        },
+        {
+          "launch_ms": 89.19501304626465,
+          "ms": 44.509458,
+          "event": "find_pre"
+        },
+        {
+          "launch_ms": 93.62196922302246,
+          "ms": 48.937458,
+          "event": "prompt"
+        },
+        {
+          "launch_ms": 198.4660625457764,
+          "ms": 153.781416,
+          "extra": {
+            "results": 29
+          },
+          "event": "complete"
+        },
+        {
+          "launch_ms": 4040.821075439453,
+          "ms": 3996.092125,
+          "extra": {
+            "messages": "",
+            "mode": "i"
+          },
+          "event": "end"
+        }
+      ],
+      "frontend": {}
+    },
+    {
+      "sample": "zvim-bench-ignored-terminal-bundled-1",
+      "kind": "ignore_only",
+      "events": [
+        {
+          "launch_ms": 23.30780029296875,
+          "ms": 0.046459,
+          "event": "bootstrap"
+        },
+        {
+          "launch_ms": 41.08881950378418,
+          "ms": 17.827542,
+          "event": "VimEnter"
+        },
+        {
+          "launch_ms": 54.83698844909668,
+          "ms": 31.575667,
+          "event": "find_pre"
+        },
+        {
+          "launch_ms": 56.89477920532227,
+          "ms": 33.633125,
+          "event": "prompt"
+        },
+        {
+          "launch_ms": 141.8898105621338,
+          "ms": 118.63,
+          "event": "complete",
+          "extra": {
+            "results": 29
+          }
+        },
+        {
+          "launch_ms": 4023.236989974976,
+          "ms": 3999.924667,
+          "event": "end",
+          "extra": {
+            "mode": "i",
+            "messages": ""
+          }
+        }
+      ],
+      "frontend": {}
+    },
+    {
+      "sample": "zvim-bench-ignored-terminal-system-0",
+      "kind": "ignore_only",
+      "events": [
+        {
+          "event": "bootstrap",
+          "launch_ms": 30.88998794555664,
+          "ms": 0.054166
+        },
+        {
+          "event": "VimEnter",
+          "launch_ms": 69.38695907592773,
+          "ms": 38.55075
+        },
+        {
+          "event": "find_pre",
+          "launch_ms": 92.2548770904541,
+          "ms": 61.419125
+        },
+        {
+          "event": "prompt",
+          "launch_ms": 94.89703178405762,
+          "ms": 64.068041
+        },
+        {
+          "extra": {
+            "results": 29
+          },
+          "event": "complete",
+          "launch_ms": 227.7040481567383,
+          "ms": 196.866875
+        },
+        {
+          "extra": {
+            "messages": "",
+            "mode": "i"
+          },
+          "event": "end",
+          "launch_ms": 4030.601024627686,
+          "ms": 3999.719791
+        }
+      ],
+      "frontend": {}
+    },
+    {
+      "sample": "zvim-bench-ignored-terminal-system-1",
+      "kind": "ignore_only",
+      "events": [
+        {
+          "event": "bootstrap",
+          "launch_ms": 25.11000633239746,
+          "ms": 0.048625
+        },
+        {
+          "event": "VimEnter",
+          "launch_ms": 42.82402992248535,
+          "ms": 17.762625
+        },
+        {
+          "event": "find_pre",
+          "launch_ms": 54.86202239990234,
+          "ms": 29.800666
+        },
+        {
+          "event": "prompt",
+          "launch_ms": 57.17086791992188,
+          "ms": 32.109875
+        },
+        {
+          "event": "complete",
+          "launch_ms": 149.3039131164551,
+          "ms": 124.241541,
+          "extra": {
+            "results": 29
+          }
+        },
+        {
+          "event": "end",
+          "launch_ms": 4025.117874145508,
+          "ms": 4000.014,
+          "extra": {
+            "mode": "i",
+            "messages": ""
+          }
+        }
+      ],
+      "frontend": {}
+    },
+    {
+      "sample": "zvim-font-before-0",
+      "kind": "font_profile_before",
+      "events": [
+        {
+          "launch_ms": 534.1708660125732,
+          "ms": 0.065833,
+          "event": "bootstrap"
+        },
+        {
+          "launch_ms": 584.7518444061279,
+          "ms": 50.647667,
+          "event": "VimEnter"
+        },
+        {
+          "launch_ms": 655.587911605835,
+          "ms": 121.483958,
+          "event": "find_pre"
+        },
+        {
+          "launch_ms": 660.8479022979736,
+          "ms": 126.743667,
+          "event": "prompt"
+        },
+        {
+          "launch_ms": 822.6559162139893,
+          "ms": 288.550917,
+          "event": "resize",
+          "extra": [
+            221,
+            64
+          ]
+        },
+        {
+          "launch_ms": 873.1658458709717,
+          "ms": 339.058375,
+          "event": "complete",
+          "extra": {
+            "results": 29
+          }
+        },
+        {
+          "launch_ms": 4529.64973449707,
+          "ms": 3995.494292,
+          "event": "end",
+          "extra": {
+            "mode": "i",
+            "messages": ""
+          }
+        }
+      ],
+      "frontend": {
+        "first_grid_paint_ms": 268,
+        "font_resolution_ms": 135
+      }
+    },
+    {
+      "sample": "zvim-font-before-1",
+      "kind": "font_profile_before",
+      "events": [
+        {
+          "launch_ms": 229.65407371521,
+          "ms": 0.055791,
+          "event": "bootstrap"
+        },
+        {
+          "launch_ms": 260.6880664825439,
+          "ms": 31.09225,
+          "event": "VimEnter"
+        },
+        {
+          "launch_ms": 278.7959575653076,
+          "ms": 49.199958,
+          "event": "find_pre"
+        },
+        {
+          "launch_ms": 281.6190719604492,
+          "ms": 52.0215,
+          "event": "prompt"
+        },
+        {
+          "launch_ms": 453.1650543212891,
+          "ms": 223.565875,
+          "extra": {
+            "results": 29
+          },
+          "event": "complete"
+        },
+        {
+          "launch_ms": 483.5300445556641,
+          "ms": 253.936666,
+          "extra": [
+            221,
+            64
+          ],
+          "event": "resize"
+        },
+        {
+          "launch_ms": 4229.998111724854,
+          "ms": 4000.369666,
+          "extra": {
+            "mode": "i",
+            "messages": ""
+          },
+          "event": "end"
+        }
+      ],
+      "frontend": {
+        "first_grid_paint_ms": 283,
+        "font_resolution_ms": 152
+      }
+    },
+    {
+      "sample": "zvim-font-after-0",
+      "kind": "font_profile_after",
+      "events": [
+        {
+          "ms": 0.078167,
+          "event": "bootstrap",
+          "launch_ms": 651.4239311218262
+        },
+        {
+          "ms": 57.413167,
+          "event": "VimEnter",
+          "launch_ms": 708.7588310241699
+        },
+        {
+          "ms": 84.371583,
+          "event": "find_pre",
+          "launch_ms": 735.7177734375
+        },
+        {
+          "ms": 89.610125,
+          "event": "prompt",
+          "launch_ms": 740.9558296203613
+        },
+        {
+          "ms": 245.255083,
+          "event": "resize",
+          "extra": [
+            221,
+            64
+          ],
+          "launch_ms": 896.6000080108643
+        },
+        {
+          "ms": 312.733792,
+          "event": "complete",
+          "extra": {
+            "results": 29
+          },
+          "launch_ms": 964.0789031982422
+        },
+        {
+          "ms": 3990.032625,
+          "event": "end",
+          "extra": {
+            "mode": "i",
+            "messages": ""
+          },
+          "launch_ms": 4641.424894332886
+        }
+      ],
+      "frontend": {
+        "first_grid_paint_ms": 262,
+        "font_resolution_ms": 8
+      }
+    },
+    {
+      "sample": "zvim-font-after-1",
+      "kind": "font_profile_after",
+      "events": [
+        {
+          "event": "bootstrap",
+          "ms": 0.054958,
+          "launch_ms": 315.0322437286377
+        },
+        {
+          "event": "VimEnter",
+          "ms": 29.175708,
+          "launch_ms": 344.1503047943115
+        },
+        {
+          "event": "find_pre",
+          "ms": 45.584292,
+          "launch_ms": 360.5592250823975
+        },
+        {
+          "event": "prompt",
+          "ms": 49.792417,
+          "launch_ms": 364.76731300354
+        },
+        {
+          "event": "resize",
+          "ms": 168.862625,
+          "launch_ms": 483.8371276855469,
+          "extra": [
+            221,
+            64
+          ]
+        },
+        {
+          "event": "complete",
+          "ms": 245.910375,
+          "launch_ms": 560.8892440795898,
+          "extra": {
+            "results": 29
+          }
+        },
+        {
+          "event": "end",
+          "ms": 3999.743917,
+          "launch_ms": 4314.767122268677,
+          "extra": {
+            "mode": "i",
+            "messages": ""
+          }
+        }
+      ],
+      "frontend": {
+        "first_grid_paint_ms": 215,
+        "font_resolution_ms": 6
+      }
+    },
+    {
+      "sample": "zvim-font-after-2",
+      "kind": "font_profile_after",
+      "events": [
+        {
+          "launch_ms": 203.8800716400146,
+          "ms": 0.054167,
+          "event": "bootstrap"
+        },
+        {
+          "launch_ms": 234.2960834503174,
+          "ms": 30.470709,
+          "event": "VimEnter"
+        },
+        {
+          "launch_ms": 250.1480579376221,
+          "ms": 46.323125,
+          "event": "find_pre"
+        },
+        {
+          "launch_ms": 252.2740364074707,
+          "ms": 48.448834,
+          "event": "prompt"
+        },
+        {
+          "launch_ms": 334.2800140380859,
+          "ms": 130.453167,
+          "event": "resize",
+          "extra": [
+            221,
+            64
+          ]
+        },
+        {
+          "launch_ms": 369.4632053375244,
+          "ms": 165.636375,
+          "event": "complete",
+          "extra": {
+            "results": 29
+          }
+        },
+        {
+          "launch_ms": 4204.674005508423,
+          "ms": 4000.803042,
+          "event": "end",
+          "extra": {
+            "mode": "i",
+            "messages": ""
+          }
+        }
+      ],
+      "frontend": {
+        "first_grid_paint_ms": 106,
+        "font_resolution_ms": 8
+      }
+    },
+    {
+      "sample": "zvim-final-cli-startup",
+      "kind": "final_installed_cli",
+      "events": [
+        {
+          "launch_ms": 1112.358093261719,
+          "ms": 0.265917,
+          "event": "bootstrap"
+        },
+        {
+          "launch_ms": 1188.554048538208,
+          "ms": 76.457292,
+          "event": "VimEnter"
+        },
+        {
+          "launch_ms": 1225.719928741455,
+          "ms": 113.623167,
+          "event": "find_pre"
+        },
+        {
+          "launch_ms": 1228.118896484375,
+          "ms": 116.020417,
+          "event": "prompt"
+        },
+        {
+          "launch_ms": 1391.788005828857,
+          "ms": 279.69075,
+          "event": "resize",
+          "extra": [
+            221,
+            64
+          ]
+        },
+        {
+          "launch_ms": 1445.131063461304,
+          "ms": 333.031625,
+          "event": "complete",
+          "extra": {
+            "results": 31
+          }
+        },
+        {
+          "launch_ms": 5106.842994689941,
+          "ms": 3994.698458,
+          "event": "end",
+          "extra": {
+            "mode": "i",
+            "messages": ""
+          }
+        }
+      ],
+      "frontend": {
+        "first_grid_paint_ms": 222,
+        "font_resolution_ms": 10
+      }
+    },
+    {
+      "sample": "zvim-final-cli-warm",
+      "kind": "final_installed_cli",
+      "events": [
+        {
+          "launch_ms": 356.619119644165,
+          "ms": 0.071542,
+          "event": "bootstrap"
+        },
+        {
+          "launch_ms": 425.0431060791016,
+          "ms": 68.499125,
+          "event": "VimEnter"
+        },
+        {
+          "launch_ms": 461.7040157318115,
+          "ms": 105.164459,
+          "event": "find_pre"
+        },
+        {
+          "launch_ms": 467.3621654510498,
+          "ms": 110.815667,
+          "event": "prompt"
+        },
+        {
+          "launch_ms": 648.8471031188965,
+          "extra": [
+            221,
+            64
+          ],
+          "ms": 292.300959,
+          "event": "resize"
+        },
+        {
+          "launch_ms": 714.5700454711914,
+          "extra": {
+            "results": 31
+          },
+          "ms": 358.019375,
+          "event": "complete"
+        },
+        {
+          "launch_ms": 4342.708110809326,
+          "extra": {
+            "mode": "i",
+            "messages": ""
+          },
+          "ms": 3986.118334,
+          "event": "end"
+        }
+      ],
+      "frontend": {
+        "first_grid_paint_ms": 270,
+        "font_resolution_ms": 8
+      }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Zvim
+GenericName=Text Editor
+Comment=A focused Neovim frontend
+Exec=zvim %F
+Terminal=false
+Categories=Utility;TextEditor;Development;
+MimeType=text/plain;text/x-source;
+StartupWMClass=zvim

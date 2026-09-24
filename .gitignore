@@ -1,0 +1,8 @@
+/target/
+/dist/
+/vendor/
+/.cache/
+.DS_Store
+
+__pycache__/
+/nvim.log

@@ -1,0 +1,8 @@
+# Keep generated files out of ripgrep/Telescope even before this folder is a Git repository.
+/target/
+/dist/
+/vendor/
+/.cache/
+__pycache__/
+/nvim.log
+.DS_Store
