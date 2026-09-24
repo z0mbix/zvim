@@ -5,6 +5,8 @@ bundle:
     python3 scripts/bundle-neovim.py
 
 run *args:
+    cargo build --locked
+    python3 scripts/bundle-ghostty.py
     cargo run --locked -- {{args}}
 
 check:
@@ -18,3 +20,9 @@ package:
 
 install-cli:
     python3 scripts/install-cli.py
+
+# macOS: opens a temporary native window and checks live terminal theme updates.
+check-terminal-theme:
+    cargo build --locked
+    python3 scripts/bundle-ghostty.py
+    python3 scripts/test-terminal-theme.py

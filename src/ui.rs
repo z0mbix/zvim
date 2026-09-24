@@ -7,9 +7,35 @@ use zvim::{
     settings::Settings,
 };
 
-actions!(zvim, [Open, Close, Paste, NewWindow, Quit, OpenSettings]);
+actions!(
+    zvim,
+    [
+        Open,
+        Close,
+        Paste,
+        NewWindow,
+        Quit,
+        OpenSettings,
+        ToggleTerminal,
+        CloseTerminal
+    ]
+);
+
+#[derive(Clone, Copy)]
+enum CloseTarget {
+    Terminal,
+    Window,
+    Editor,
+}
 
 pub struct Editor {
+    terminal: Option<Entity<crate::terminal::Terminal>>,
+    terminal_visible: bool,
+    terminal_theme: Option<zvim::terminal_theme::TerminalTheme>,
+    close_pending: bool,
+    close_requested: bool,
+    close_restore_terminal_focus: bool,
+    exit_confirmed: bool,
     session: Option<Session>,
     grid: Grid,
     focus: FocusHandle,
@@ -70,7 +96,8 @@ impl Editor {
             .detach();
         }
         cx.observe_global_in::<crate::preferences::AppPreferences>(window, |v, w, cx| {
-            v.apply_appearance(w, cx)
+            v.apply_appearance(w, cx);
+            v.sync_terminal_theme(cx);
         })
         .detach();
         cx.observe_window_appearance(window, |v, w, cx| v.apply_appearance(w, cx))
@@ -79,18 +106,25 @@ impl Editor {
             .detach();
         let weak = cx.entity().downgrade();
         window.on_window_should_close(cx, move |window, cx| {
-            weak.update(cx, |v, _| {
+            weak.update(cx, |v, cx| {
                 v.save(window);
-                if v.exited || v.session.is_none() {
+                if (v.exited || v.session.is_none()) && v.terminal.is_none() {
                     true
                 } else {
-                    v.close();
+                    v.request_close(window, cx);
                     false
                 }
             })
             .unwrap_or(true)
         });
         Self {
+            terminal: None,
+            terminal_visible: false,
+            terminal_theme: None,
+            close_pending: false,
+            close_requested: false,
+            close_restore_terminal_focus: false,
+            exit_confirmed: false,
             session,
             grid: Grid::default(),
             focus,
@@ -129,6 +163,24 @@ impl Editor {
             self.applied_background = desired;
         }
     }
+    fn sync_terminal_theme(&mut self, cx: &mut Context<Self>) {
+        if let Some(terminal) = &self.terminal {
+            let config = cx
+                .global::<crate::preferences::AppPreferences>()
+                .0
+                .terminal_follow_neovim
+                .then(|| {
+                    self.terminal_theme
+                        .as_ref()
+                        .map(|theme| theme.config(self.grid.foreground, self.grid.background))
+                })
+                .flatten();
+            if let Err(error) = terminal.update(cx, |terminal, _| terminal.set_theme(config)) {
+                self.error = Some(format!("Cannot update terminal theme: {error}"));
+                cx.notify();
+            }
+        }
+    }
     fn save(&self, window: &Window) {
         if !zvim::settings::Preferences::load().is_ok_and(|p| p.remember_window_geometry) {
             return;
@@ -148,14 +200,201 @@ impl Editor {
             s.close();
         }
     }
+    fn request_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.close_pending || self.close_requested {
+            return;
+        }
+        if self.exited || self.session.is_none() {
+            self.confirm_terminal_close(CloseTarget::Window, window, cx);
+        } else {
+            self.confirm_terminal_close(CloseTarget::Editor, window, cx);
+        }
+    }
+    fn hide_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(t) = &self.terminal {
+            t.update(cx, |t, _| t.set_visible(false));
+        }
+        self.terminal_visible = false;
+        window.focus(&self.focus);
+        window.refresh();
+        cx.notify();
+    }
+    fn toggle_terminal(&mut self, _: &ToggleTerminal, window: &mut Window, cx: &mut Context<Self>) {
+        if self.terminal_visible {
+            if !self.exited {
+                self.hide_terminal(window, cx);
+            }
+        } else if let Some(t) = &self.terminal
+            && t.read(cx).is_alive()
+        {
+            t.update(cx, |t, cx| t.focus(window, cx));
+            self.terminal_visible = true;
+            cx.notify();
+        } else if let Some(s) = &self.session
+            && !self.exited
+        {
+            s.rpc.send("nvim_command", vec!["ZvimTerminal".into()]);
+        } else {
+            self.show_terminal(
+                std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")),
+                window,
+                cx,
+            );
+        }
+    }
+    fn show_terminal(&mut self, cwd: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+        if self.terminal_visible
+            && self
+                .terminal
+                .as_ref()
+                .is_some_and(|t| t.read(cx).is_alive())
+        {
+            self.hide_terminal(window, cx);
+            return;
+        }
+        if self
+            .terminal
+            .as_ref()
+            .is_none_or(|t| !t.read(cx).is_alive())
+        {
+            self.terminal = None;
+            let shell = std::env::var("SHELL")
+                .ok()
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "/bin/sh".into());
+            let command = format!("'{}' -l", shell.replace('\'', "'\\''"));
+            let mut options = gpui_libghostty::TerminalOptions::new(command, cwd);
+            options.configuration = gpui_libghostty::TerminalConfiguration::UserDefault;
+            match crate::terminal::Terminal::spawn(options, window, cx) {
+                Ok(t) => {
+                    self.terminal = Some(t);
+                    window.on_next_frame(|window, _| window.refresh());
+                }
+                Err(error) => {
+                    self.error = Some(format!("Cannot open terminal: {error}"));
+                    self.terminal_visible = false;
+                    cx.notify();
+                    return;
+                }
+            }
+        }
+        if let Some(t) = &self.terminal {
+            t.update(cx, |t, cx| t.focus(window, cx));
+        }
+        self.sync_terminal_theme(cx);
+        self.terminal_visible = true;
+        window.refresh();
+        cx.notify();
+    }
+    fn finish_close(&mut self, target: CloseTarget, window: &mut Window, cx: &mut Context<Self>) {
+        match target {
+            CloseTarget::Editor => {
+                self.exit_confirmed = true;
+                self.close_requested = true;
+                self.close_restore_terminal_focus = self
+                    .terminal
+                    .as_ref()
+                    .is_some_and(|t| t.read(cx).is_focused(window));
+                window.focus(&self.focus);
+                self.close();
+            }
+            CloseTarget::Terminal | CloseTarget::Window => {
+                self.terminal = None;
+                self.hide_terminal(window, cx);
+                if matches!(target, CloseTarget::Window) || self.exited {
+                    window.remove_window();
+                }
+            }
+        }
+    }
+    fn confirm_terminal_close(
+        &mut self,
+        target: CloseTarget,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.close_pending {
+            return;
+        }
+        if self
+            .terminal
+            .as_ref()
+            .is_none_or(|t| !t.read(cx).needs_confirm_quit())
+        {
+            self.finish_close(target, window, cx);
+            return;
+        }
+        let was_focused = self
+            .terminal
+            .as_ref()
+            .is_some_and(|t| t.read(cx).is_focused(window));
+        // Composite a still frame while the native surface is hidden, so it cannot
+        // paint over the modal and the terminal does not turn into an empty pane.
+        if let Some(terminal) = &self.terminal {
+            terminal.update(cx, |terminal, cx| terminal.prepare_close_prompt(cx));
+        }
+        self.close_pending = true;
+        cx.notify();
+        let closing_editor = !matches!(target, CloseTarget::Terminal);
+        let answer = window.prompt(
+            PromptLevel::Warning,
+            if closing_editor { if self.exited { "Close the remaining terminal?" } else { "Close window and stop terminal processes?" } } else { "Stop terminal processes?" },
+            Some("The terminal may still have a running command. Closing it will stop the shell and its programs."),
+            &[if self.exited { "Keep Terminal" } else { "Cancel" }, if closing_editor { "Close Window" } else { "Close Terminal" }],
+            cx,
+        );
+        cx.spawn_in(window, async move |view, cx| {
+            let confirmed = answer.await.ok() == Some(1);
+            let _ = view.update_in(cx, |v, w, cx| {
+                v.close_pending = false;
+                if let Some(terminal) = &v.terminal {
+                    terminal.update(cx, |terminal, cx| {
+                        terminal.set_visible(v.terminal_visible);
+                        if was_focused && v.terminal_visible {
+                            terminal.focus(w, cx);
+                        }
+                    });
+                }
+                if confirmed {
+                    v.finish_close(target, w, cx);
+                } else if v.exited
+                    && let Some(terminal) = &v.terminal
+                {
+                    v.terminal_visible = true;
+                    terminal.update(cx, |terminal, cx| terminal.focus(w, cx));
+                }
+                w.refresh();
+                cx.notify();
+            });
+        })
+        .detach();
+    }
     fn event(&mut self, event: Event, window: &mut Window, cx: &mut Context<Self>) {
         match event {
+            Event::CloseReturned => {
+                self.exit_confirmed = false;
+                self.close_requested = false;
+                if self.close_restore_terminal_focus
+                    && self.terminal_visible
+                    && let Some(terminal) = &self.terminal
+                {
+                    terminal.update(cx, |terminal, cx| terminal.focus(window, cx));
+                }
+                self.close_restore_terminal_focus = false;
+                cx.notify();
+            }
+            Event::TerminalTheme(theme) => {
+                self.terminal_theme = Some(theme);
+                self.sync_terminal_theme(cx);
+            }
+            Event::Terminal(cwd) => self.show_terminal(cwd, window, cx),
             Event::Frame => {
                 zvim::startup::mark("frame_received");
                 if let Some(g) = self.session.as_ref().and_then(Session::take_frame) {
                     self.grid = g;
                     self.appearance_ready = true;
                     self.apply_appearance(window, cx);
+                    self.sync_terminal_theme(cx);
 
                     let title = self.grid.title.trim();
                     window.set_window_title(if title.is_empty() || title == "Zvim" {
@@ -187,14 +426,27 @@ impl Editor {
                 }
             }
             Event::Error(e) => {
-                self.error = Some(e);
+                if !self.exited {
+                    self.error = Some(e);
+                }
                 cx.notify();
             }
             Event::Exited(success) => {
                 self.exited = true;
+                self.close_requested = false;
+                self.session = None;
+                window.set_window_title("Zvim — Terminal");
+                if self.terminal.is_some() && !self.exit_confirmed {
+                    self.terminal_visible = true;
+                }
                 self.save(window);
                 if success {
-                    window.remove_window();
+                    self.error = None;
+                    if self.exit_confirmed {
+                        self.finish_close(CloseTarget::Window, window, cx);
+                    } else {
+                        self.confirm_terminal_close(CloseTarget::Window, window, cx);
+                    }
                 } else {
                     self.error=Some("Neovim exited unexpectedly. See neovim.log in the Zvim configuration directory.".into());
                     cx.notify();
@@ -220,7 +472,13 @@ impl Editor {
         })
         .detach();
     }
-    fn paste(&mut self, _: &Paste, _: &mut Window, cx: &mut Context<Self>) {
+    fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(terminal) = &self.terminal
+            && terminal.read(cx).is_focused(window)
+        {
+            terminal.update(cx, |t, _| t.paste());
+            return;
+        }
         if let Some(text) = cx.read_from_clipboard().and_then(|c| c.text())
             && let Some(s) = &self.session
         {
@@ -248,7 +506,7 @@ impl Editor {
                     return;
                 }
                 "w" => {
-                    self.close();
+                    self.request_close(window, cx);
                     cx.stop_propagation();
                     return;
                 }
@@ -649,8 +907,6 @@ fn paint_cell_line(
 fn default_font() -> &'static str {
     if cfg!(target_os = "macos") {
         "Menlo"
-    } else if cfg!(windows) {
-        "Consolas"
     } else {
         "monospace"
     }
@@ -731,23 +987,24 @@ impl Focusable for Editor {
     }
 }
 impl Render for Editor {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let height = window.viewport_size().height;
+        let terminal_height = if self.terminal_visible {
+            if self.exited {
+                (height - px(56.)).max(px(0.))
+            } else {
+                height * 0.4
+            }
+        } else {
+            px(0.)
+        };
         let mut root = div()
             .size_full()
+            .relative()
             .overflow_hidden()
             .track_focus(&self.focus)
             .key_context("Zvim")
             .on_key_down(cx.listener(Self::key))
-            .on_action(cx.listener(Self::open))
-            .on_action(cx.listener(Self::paste))
-            .on_action(cx.listener(|v, _: &Close, w, cx| {
-                if v.exited || v.session.is_none() {
-                    w.remove_window();
-                } else {
-                    v.close();
-                }
-                cx.notify();
-            }))
             .on_scroll_wheel(cx.listener(Self::wheel))
             .on_mouse_move(cx.listener(|v, e: &MouseMoveEvent, _, _| {
                 if let Some(b) = e.pressed_button {
@@ -781,22 +1038,93 @@ impl Render for Editor {
                     }),
                 );
         }
-        root.child(GridElement {
-            editor: cx.entity(),
-        })
-        .when_some(self.error.clone(), |el, error| {
-            el.child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .right_0()
+        let editor = root
+            .when(!self.exited, |el| {
+                el.child(GridElement {
+                    editor: cx.entity(),
+                })
+            })
+            .when(self.exited, |el| {
+                el.bg(rgb(0x24242b))
+                    .text_color(rgb(0xdddddd))
                     .p_4()
-                    .bg(rgb(0x52252c))
-                    .text_color(rgb(0xffffff))
-                    .child(error),
+                    .child("Neovim closed · Terminal session retained")
+            });
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .key_context("ZvimWindow")
+            .on_action(cx.listener(Self::open))
+            .on_action(cx.listener(Self::paste))
+            .on_action(cx.listener(Self::toggle_terminal))
+            .on_action(cx.listener(|v, _: &CloseTerminal, w, cx| {
+                v.confirm_terminal_close(CloseTarget::Terminal, w, cx)
+            }))
+            .on_action(cx.listener(|v, _: &Close, w, cx| v.request_close(w, cx)))
+            .child(
+                div()
+                    .w_full()
+                    .h(height - terminal_height)
+                    .flex_shrink_0()
+                    .child(editor),
             )
-        })
+            .when(self.terminal_visible, |root| {
+                root.child(
+                    div()
+                        .w_full()
+                        .h(terminal_height)
+                        .flex_shrink_0()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .h(px(28.))
+                                .flex_shrink_0()
+                                .px_3()
+                                .flex()
+                                .items_center()
+                                .justify_between()
+                                .bg(rgb(0x24242b))
+                                .text_color(rgb(0xdddddd))
+                                .text_sm()
+                                .child(if self.exited {
+                                    "Terminal"
+                                } else {
+                                    "Ghostty · Ctrl+` to hide"
+                                })
+                                .child(
+                                    div()
+                                        .id("hide-terminal")
+                                        .cursor_pointer()
+                                        .child(if self.exited { "Close" } else { "Hide" })
+                                        .on_click(cx.listener(|v, _, w, cx| {
+                                            if v.exited {
+                                                v.request_close(w, cx);
+                                            } else {
+                                                v.hide_terminal(w, cx);
+                                            }
+                                        })),
+                                ),
+                        )
+                        .when_some(self.terminal.clone(), |el, terminal| {
+                            el.child(div().w_full().h(terminal_height - px(28.)).child(terminal))
+                        }),
+                )
+            })
+            .when_some(self.error.clone(), |el, error| {
+                el.child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .right_0()
+                        .p_4()
+                        .bg(rgb(0x52252c))
+                        .text_color(rgb(0xffffff))
+                        .child(error),
+                )
+            })
     }
 }
 fn button_name(b: MouseButton) -> &'static str {
@@ -1046,13 +1374,9 @@ pub fn request_close_all(cx: &mut App) {
             {
                 window.remove_window();
             } else if let Ok(editor) = root.downcast::<Editor>() {
-                editor.update(cx, |view, _| {
+                editor.update(cx, |view, cx| {
                     view.save(window);
-                    if view.exited || view.session.is_none() {
-                        window.remove_window();
-                    } else {
-                        view.close();
-                    }
+                    view.request_close(window, cx);
                 });
             }
         });

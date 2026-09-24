@@ -15,7 +15,10 @@ use std::{
 };
 
 pub enum Event {
+    Terminal(PathBuf),
+    TerminalTheme(crate::terminal_theme::TerminalTheme),
     Frame,
+    CloseReturned,
     ClipboardCopy(String),
     ClipboardPaste(u64),
     Error(String),
@@ -93,19 +96,13 @@ pub struct Launch {
 pub fn bundled_neovim() -> Result<PathBuf> {
     let exe = std::env::current_exe()?;
     let dir = exe.parent().context("no executable directory")?;
-    let bin = if cfg!(windows) {
-        "bin/nvim.exe"
-    } else {
-        "bin/nvim"
-    };
+    let bin = "bin/nvim";
     let target = if cfg!(target_os = "macos") {
         if cfg!(target_arch = "aarch64") {
             "macos-arm64"
         } else {
             "macos-x86_64"
         }
-    } else if cfg!(windows) {
-        "windows-x86_64"
     } else {
         "linux-x86_64"
     };
@@ -198,11 +195,6 @@ impl Session {
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x08000000);
-        }
         let mut child = cmd
             .spawn()
             .with_context(|| format!("could not launch {}", exe.display()))?;
@@ -258,6 +250,17 @@ impl Session {
                         let args = a[2].as_array().cloned().unwrap_or_default();
                         match a[1].as_str() {
                             Some("redraw") => {
+                                if args.iter().any(|event| {
+                                    matches!(
+                                        event
+                                            .as_array()
+                                            .and_then(|a| a.first())
+                                            .and_then(Value::as_str),
+                                        Some("default_colors_set" | "hl_attr_define")
+                                    )
+                                }) {
+                                    reader_rpc.send("nvim_exec_lua", vec!["if _G.__zvim_terminal_theme_refresh then _G.__zvim_terminal_theme_refresh() end".into(), Value::Array(vec![])]);
+                                }
                                 crate::startup::mark("redraw_decode_begin");
                                 let result = grid.redraw(&args);
                                 crate::startup::mark("redraw_decode_end");
@@ -305,6 +308,24 @@ impl Session {
                                     text.push('\n');
                                 }
                                 let _ = reader_events.send_blocking(Event::ClipboardCopy(text));
+                            }
+                            Some("zvim_terminal_theme") => {
+                                if let Some(theme) = args
+                                    .first()
+                                    .and_then(crate::terminal_theme::TerminalTheme::from_value)
+                                {
+                                    let _ =
+                                        reader_events.send_blocking(Event::TerminalTheme(theme));
+                                }
+                            }
+                            Some("zvim_close_returned") => {
+                                let _ = reader_events.send_blocking(Event::CloseReturned);
+                            }
+                            Some("zvim_terminal") => {
+                                if let Some(cwd) = args.first().and_then(Value::as_str) {
+                                    let _ = reader_events
+                                        .send_blocking(Event::Terminal(PathBuf::from(cwd)));
+                                }
                             }
                             _ => {}
                         }
@@ -426,7 +447,10 @@ impl Session {
             .send("nvim_paste", vec![text.into(), true.into(), (-1).into()]);
     }
     pub fn close(&self) {
-        self.rpc.send("nvim_command", vec!["confirm qall".into()]);
+        self.rpc.send("nvim_exec_lua", vec![
+            "local ok, err = pcall(vim.cmd, 'confirm qall'); if not ok then vim.api.nvim_err_writeln(tostring(err)) end; vim.rpcnotify(vim.g.zvim_channel, 'zvim_close_returned')".into(),
+            Value::Array(vec![]),
+        ]);
     }
     pub fn open_files(&self, paths: &[PathBuf]) {
         let files = Value::Array(
@@ -474,7 +498,18 @@ pub fn initialize(rpc: &Rpc, width: u64, height: u64) -> Result<()> {
             Value::Array(vec![channel.into()]),
         ],
     )?;
+    rpc.request(
+        "nvim_exec_lua",
+        vec![
+            include_str!("terminal_theme.lua").into(),
+            Value::Array(vec![channel.into()]),
+        ],
+    )?;
     crate::startup::mark("ui_attach_begin");
+    rpc.request("nvim_exec_lua", vec![
+        "local channel = ...; vim.g.zvim_channel = channel; vim.api.nvim_create_user_command('ZvimTerminal', function() vim.rpcnotify(channel, 'zvim_terminal', vim.fn.getcwd()) end, {desc='Toggle Zvim native terminal'})".into(),
+        Value::Array(vec![channel.into()]),
+    ])?;
     rpc.request(
         "nvim_ui_attach",
         vec![

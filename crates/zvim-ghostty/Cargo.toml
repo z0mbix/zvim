@@ -1,0 +1,24 @@
+[package]
+name = "zvim-ghostty"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/behzade/gpui-libghostty"
+
+[dependencies]
+ghostty-upstream = { package = "gpui-libghostty", git = "https://github.com/behzade/gpui-libghostty", rev = "bfa3771f0ef2290e54acf9f1fc11e05d42a882ee" }
+async-channel = "2.5"
+image = { version = "0.25", default-features = false }
+raw-window-handle = "0.6"
+tempfile = "3.27"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+khronos-egl = { version = "6.0", features = ["dynamic"] }
+libc = "0.2"
+libloading = "0.8"
+wayland-backend = { version = "0.3", features = ["client_system", "dlopen"] }
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client"] }
+
+[build-dependencies]
+cc = "1"

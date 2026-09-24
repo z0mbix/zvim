@@ -2,14 +2,16 @@
 
 A focused native frontend for Neovim, written in Rust with GPUI. Neovim owns editing, splits, plugins, LSP, and configuration. Zvim draws the screen and integrates input, clipboard, windows, and file opening with the desktop.
 
-**Status: macOS prototype, not a cross-platform v1 release.** The macOS build and bundled-editor tests have been exercised locally. Linux/Windows source and packaging support remain experimental; current CI and releases target macOS. See [validation](docs/VALIDATION.md).
+**Platforms: macOS and Linux only.** macOS is exercised locally; Linux remains experimental. The native Ghostty terminal requires Wayland on Linux; the editor can still run on X11. See [validation](docs/VALIDATION.md).
 
 ## Run on macOS
 
-Requires Rust 1.98.1, Apple command-line developer tools, Python 3, and curl. GPUI's runtime Metal shader compilation is enabled, so the separate Xcode Metal compiler component is not required.
+Requires macOS 13 or newer, Rust 1.98.1, Apple command-line developer tools, Python 3, curl, and Zig 0.16.0. GPUI's runtime Metal shader compilation is enabled, so the separate Xcode Metal compiler component is not required.
 
 ```sh
 python3 scripts/bundle-neovim.py
+cargo build --locked
+python3 scripts/bundle-ghostty.py
 cargo run --locked -- --clean
 cargo run --locked -- path/to/file.rs
 ```
@@ -26,15 +28,16 @@ On an Intel Mac the directory is `dist/zvim-macos-x86_64`. The `.app` is signed 
 
 ## Command-line launcher
 
-After packaging, install the launcher (defaults to `~/.local/bin`):
+After moving Zvim to its permanent location, open **Settings → Command-line launcher**:
 
-```sh
-python3 scripts/install-cli.py
-# If you move the app to Applications:
-python3 scripts/install-cli.py --app /Applications/Zvim.app
-```
+1. Keep the default `~/.local/bin`, or use **Choose folder…** to select your bin directory.
+2. Click **Install / update zvim**.
 
-Keep the installation directory on your PATH. The installer also ships inside the macOS app at `Contents/Resources/install-cli.py`, and beside the executable in Linux/Windows archives. It does not edit your shell configuration. Windows installs `zvim.cmd`; use `--bin-dir` to choose a directory on PATH.
+The app installs the launcher directly, with no Python or additional tools required. The selected directory is remembered, missing default directories are created, and unrelated commands or symlinks are never replaced. Choose a writable location; the app does not request administrator privileges. If you move the app, repeat installation. Choosing a different directory leaves the previous launcher in place.
+
+Keep that directory on your shell's PATH. For fish, run `fish_add_path ~/.local/bin` once when using the default location. For zsh, add `export PATH="$HOME/.local/bin:$PATH"` to `~/.zshrc` and open a new terminal. The app does not edit shell configuration.
+
+The Python installer remains available for development or scripted setup (`python3 scripts/install-cli.py --app /Applications/Zvim.app --bin-dir ~/.local/bin`), but is not needed when installing from Settings.
 
 ```sh
 zvim .
@@ -70,7 +73,7 @@ Preferences live in `preferences.json`, separate from `window.json`. Changes app
 - `zvim [files...]` loads your normal Neovim configuration. `zvim --clean [files...]` starts without it. Use `--` before a filename beginning with `-`.
 - Each window owns one bundled editor process. `g:zvim` is true before your configuration loads; `ZVIM=1` is also available to child tools.
 - Set `vim.opt.guifont = 'Menlo:h16'` (or your installed monospace font) and `vim.opt.linespace` in your configuration. Highlight colours and cursor shapes come from Neovim.
-- On macOS: Command-O opens files, Command-V pastes, Command-W requests close, Command-N opens a window, and Command-Q requests closing all windows. Ctrl shortcuts are forwarded to Neovim. Menus also expose Open, Paste, New Window, and Close.
+- On macOS: Command-O opens files, Command-V pastes, Command-W requests close, Command-N opens a window, and Command-Q requests closing all windows. Ctrl shortcuts are forwarded to Neovim except Ctrl+backtick, which toggles the native terminal. Menus also expose Open, Paste, New Window, and Close.
 - Mouse clicking, selection, dragging, and scrolling require Neovim's `mouse` option, for example `set mouse=a`.
 - The `+` and `*` registers use the system clipboard. Neovim's own register commands provide copy/cut; Zvim does not replace Ctrl-C.
 - File → Open, Finder's Open With, and file drops open files in the current session. Opening files never forces away unsaved edits.
@@ -79,6 +82,16 @@ Preferences live in `preferences.json`, separate from `window.json`. Changes app
 - Desktop launches preserve PATH and append common Unix package-manager locations. Tools in custom shell-only paths still need to be on the desktop environment's PATH or configured in Neovim.
 
 Your existing plugins remain responsible for their own installations, external programs, and network activity. Zvim adds no AI, accounts, collaboration, telemetry, or automatic updates.
+
+## Native terminal (experimental)
+
+Press **Ctrl+`** or choose **Terminal → Show / Hide Terminal**. From Neovim, use `:ZvimTerminal` (which you can map in your own configuration). The first opening starts `$SHELL -l` in Neovim's current window-local working directory. Hiding retains the shell, scrollback and running programs; showing resumes it. After a shell exits, hide and show the pane to start another.
+
+The pane uses Ghostty's native Metal renderer on macOS and OpenGL renderer on Linux/Wayland. It loads your Ghostty configuration for fonts and keybindings. Terminal colours follow Neovim live by default, including NvChad/Base46 themes; choose **Use Ghostty theme** under Settings → Terminal theme to opt out. Zvim's editor font remains controlled by Neovim. Ghostty application actions such as opening tabs/windows and settings are not implemented by this embedder. This first trial has one terminal per window, a fixed 40% bottom pane, and no terminal search UI or session restoration. Built-in `:terminal` and existing terminal plugins retain Neovim's behaviour.
+
+Copy/paste use Ghostty bindings (normally Command-C/V on macOS, Ctrl-Shift-C/V on Linux). Terminal → Close Terminal asks before ending a live shell. Window close and Quit warn about terminal processes before closing Neovim; Cancel preserves the editor and shell. Idle prompts detected by Ghostty close quietly. If Neovim is quit directly, **Keep Terminal** expands the remaining session to fill the window.
+
+The native dependency and its patched Ghostty source are pinned in Cargo. The initial build compiles Ghostty using Zig and downloads its dependencies; no standalone Ghostty installation is required. The integration is a trial, not a claim of complete standalone Ghostty parity. See `docs/TERMINAL.md` for limitations and verification.
 
 ## Development checks
 
@@ -90,12 +103,11 @@ cargo clippy --locked --all-targets -- -D warnings
 
 Run the bundling step before tests. The integration tests use real bundled Neovim with isolated state. `--no-default-features` runs the protocol/process tests without compiling a GUI. `just check`, `just run`, and `just package` are optional shortcuts.
 
-## Linux and Windows
+## Linux
 
-The GitHub Actions matrix builds and tests macOS arm64 and x86-64 and produces self-contained app bundles. Linux and Windows packaging scripts remain available for development, but are not release targets yet.
+CI builds macOS arm64/x86-64 and Linux x86-64. Releases currently publish macOS app bundles; Linux archives remain experimental build artifacts.
 
-- Linux: install the GPUI development dependencies listed in `docs/VALIDATION.md`; use `python3 scripts/bundle-neovim.py`, then `cargo build --release --locked` and `python3 scripts/package.py`. The archive contains `zvim`, `neovim/`, and a desktop entry. Keep the runtime beside the binary; add that directory to PATH before installing the desktop entry under `~/.local/share/applications`. Wayland and X11 backends are enabled.
-- Windows: use the Rust MSVC toolchain, Visual Studio C++ build tools and Windows SDK, Python, and curl. Run the same commands using `python`. Keep `neovim/` beside `zvim.exe` when unpacking the ZIP.
+- Linux: install the GPUI development dependencies listed in `docs/VALIDATION.md`; use `python3 scripts/bundle-neovim.py`, then `cargo build --release --locked` and `python3 scripts/package.py`. The archive contains `zvim`, `neovim/`, and a desktop entry. Keep the runtime beside the binary; add that directory to PATH before installing the desktop entry under `~/.local/share/applications`. Wayland and X11 editor backends are enabled. The Ghostty pane requires Wayland, EGL, OpenGL 4.3, libxml2 and libc++ 21 or newer.
 
 ## Architecture and limitations
 

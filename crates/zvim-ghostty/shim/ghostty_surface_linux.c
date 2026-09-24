@@ -1,0 +1,491 @@
+#include <dlfcn.h>
+#include <limits.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <ghostty.h>
+
+typedef bool (*zvim_ghostty_make_current_cb)(void *userdata);
+typedef void (*zvim_ghostty_context_cb)(void *userdata);
+typedef void (*zvim_ghostty_wakeup_cb)(void *userdata);
+// Adapter operation values: paste=0, read=1, write=2.
+typedef bool (*zvim_ghostty_approve_clipboard_cb)(void *userdata, int operation, const char *text);
+
+typedef struct zvim_ghostty_surface {
+    ghostty_config_t config;
+    ghostty_app_t app;
+    ghostty_surface_t surface;
+    void *platform_userdata;
+    zvim_ghostty_make_current_cb make_current;
+    zvim_ghostty_context_cb clear_current;
+    zvim_ghostty_context_cb swap_buffers;
+    void *wakeup_userdata;
+    zvim_ghostty_wakeup_cb wakeup;
+    zvim_ghostty_approve_clipboard_cb approve_clipboard;
+    void *clipboard_request;
+    ghostty_clipboard_e clipboard_location;
+    char *clipboard_write;
+    ghostty_clipboard_e clipboard_write_location;
+    uint32_t width;
+    uint32_t height;
+    _Atomic bool alive;
+} zvim_ghostty_surface;
+
+static pthread_once_t ghostty_once = PTHREAD_ONCE_INIT;
+static int ghostty_init_result = -1;
+static void *egl_library;
+static void *gl_library;
+typedef void (*egl_proc)(void);
+typedef egl_proc (*egl_get_proc_address_fn)(const char *name);
+typedef void (*gl_pixel_store_i_fn)(unsigned int name, int value);
+typedef void (*gl_read_buffer_fn)(unsigned int buffer);
+typedef void (*gl_read_pixels_fn)(
+    int x,
+    int y,
+    int width,
+    int height,
+    unsigned int format,
+    unsigned int type,
+    void *pixels
+);
+typedef unsigned int (*gl_get_error_fn)(void);
+
+enum {
+    GPUI_GL_BACK = 0x0405,
+    GPUI_GL_PACK_ALIGNMENT = 0x0D05,
+    GPUI_GL_BGRA = 0x80E1,
+    GPUI_GL_UNSIGNED_BYTE = 0x1401,
+};
+
+static egl_get_proc_address_fn egl_get_proc_address;
+
+static void initialize_ghostty(void) {
+    setenv("GHOSTTY_LOG", "stderr", 0);
+    ghostty_init_result = ghostty_init(0, NULL);
+    egl_library = dlopen("libEGL.so.1", RTLD_LAZY | RTLD_LOCAL);
+    gl_library = dlopen("libGL.so.1", RTLD_LAZY | RTLD_LOCAL);
+    if (egl_library != NULL) {
+        void *symbol = dlsym(egl_library, "eglGetProcAddress");
+        memcpy(&egl_get_proc_address, &symbol, sizeof(egl_get_proc_address));
+    }
+}
+
+static ghostty_gl_proc_t opengl_get_proc_address(const char *name) {
+    egl_proc proc = egl_get_proc_address != NULL ? egl_get_proc_address(name) : NULL;
+    if (proc == NULL && gl_library != NULL) {
+        void *symbol = dlsym(gl_library, name);
+        memcpy(&proc, &symbol, sizeof(proc));
+    }
+    ghostty_gl_proc_t result = NULL;
+    memcpy(&result, &proc, sizeof(result));
+    return result;
+}
+
+static void runtime_wakeup(void *userdata) {
+    zvim_ghostty_surface *state = userdata;
+    state->wakeup(state->wakeup_userdata);
+}
+
+static bool runtime_action(ghostty_app_t app, ghostty_target_s target, ghostty_action_s action) {
+    (void)app;
+    if (action.tag != GHOSTTY_ACTION_RENDER ||
+        target.tag != GHOSTTY_TARGET_SURFACE ||
+        target.target.surface == NULL) {
+        return false;
+    }
+
+    zvim_ghostty_surface *state = ghostty_surface_userdata(target.target.surface);
+    if (state == NULL || !state->make_current(state->platform_userdata)) return false;
+    ghostty_surface_draw(target.target.surface);
+    state->swap_buffers(state->platform_userdata);
+    state->clear_current(state->platform_userdata);
+    return true;
+}
+
+static bool runtime_read_clipboard(void *userdata, ghostty_clipboard_e location, void *request) {
+    zvim_ghostty_surface *state = userdata;
+    if (state->clipboard_request != NULL) return false;
+    state->clipboard_request = request;
+    state->clipboard_location = location;
+    runtime_wakeup(state);
+    return true;
+}
+
+static void runtime_confirm_read_clipboard(
+    void *userdata,
+    const char *text,
+    void *request,
+    ghostty_clipboard_request_e kind
+) {
+    zvim_ghostty_surface *state = userdata;
+    if (state->surface != NULL) {
+        int operation = kind == GHOSTTY_CLIPBOARD_REQUEST_PASTE ? 0 : 1;
+        bool approved = state->approve_clipboard != NULL &&
+            state->approve_clipboard(state->wakeup_userdata, operation, text);
+        // Completing with empty text releases Ghostty's request without exposing
+        // clipboard contents or inserting an unsafe paste.
+        ghostty_surface_complete_clipboard_request(state->surface, approved ? text : "", request, true);
+    }
+}
+
+static void runtime_write_clipboard(
+    void *userdata,
+    ghostty_clipboard_e location,
+    const ghostty_clipboard_content_s *content,
+    size_t count,
+    bool confirm
+) {
+    zvim_ghostty_surface *state = userdata;
+    for (size_t index = 0; index < count; index++) {
+        if (strcmp(content[index].mime, "text/plain") != 0) continue;
+        if (confirm && (state->approve_clipboard == NULL ||
+            !state->approve_clipboard(state->wakeup_userdata, 2, content[index].data))) return;
+        char *copy = strdup(content[index].data);
+        if (copy == NULL) return;
+        free(state->clipboard_write);
+        state->clipboard_write = copy;
+        state->clipboard_write_location = location;
+        runtime_wakeup(state);
+        return;
+    }
+}
+
+static void runtime_close_surface(void *userdata, bool process_alive) {
+    (void)process_alive;
+    zvim_ghostty_surface *state = userdata;
+    atomic_store_explicit(&state->alive, false, memory_order_release);
+    runtime_wakeup(state);
+}
+
+zvim_ghostty_surface *zvim_ghostty_surface_linux_new(
+    void *platform_userdata,
+    zvim_ghostty_make_current_cb make_current,
+    zvim_ghostty_context_cb clear_current,
+    zvim_ghostty_context_cb swap_buffers,
+    const char *working_directory,
+    const char *command,
+    bool load_user_config,
+    const char *theme_config_path,
+    double scale_factor,
+    void *wakeup_userdata,
+    zvim_ghostty_wakeup_cb wakeup,
+    zvim_ghostty_approve_clipboard_cb approve_clipboard
+) {
+    pthread_once(&ghostty_once, initialize_ghostty);
+    if (ghostty_init_result != GHOSTTY_SUCCESS || platform_userdata == NULL ||
+        make_current == NULL || clear_current == NULL || swap_buffers == NULL ||
+        wakeup_userdata == NULL || wakeup == NULL || !make_current(platform_userdata)) {
+        return NULL;
+    }
+
+    zvim_ghostty_surface *state = calloc(1, sizeof(zvim_ghostty_surface));
+    if (state == NULL) {
+        clear_current(platform_userdata);
+        return NULL;
+    }
+    atomic_init(&state->alive, true);
+    state->platform_userdata = platform_userdata;
+    state->make_current = make_current;
+    state->clear_current = clear_current;
+    state->swap_buffers = swap_buffers;
+    state->wakeup_userdata = wakeup_userdata;
+    state->wakeup = wakeup;
+    state->approve_clipboard = approve_clipboard;
+
+    state->config = ghostty_config_new();
+    if (state->config == NULL) goto fail;
+    if (load_user_config) {
+        ghostty_config_load_default_files(state->config);
+        ghostty_config_load_recursive_files(state->config);
+    }
+    if (theme_config_path != NULL) {
+        ghostty_config_load_file(state->config, theme_config_path);
+    }
+    ghostty_config_finalize(state->config);
+
+    ghostty_runtime_config_s runtime = {
+        .userdata = state,
+        .supports_selection_clipboard = true,
+        .wakeup_cb = runtime_wakeup,
+        .action_cb = runtime_action,
+        .read_clipboard_cb = runtime_read_clipboard,
+        .confirm_read_clipboard_cb = runtime_confirm_read_clipboard,
+        .write_clipboard_cb = runtime_write_clipboard,
+        .close_surface_cb = runtime_close_surface,
+    };
+    state->app = ghostty_app_new(&runtime, state->config);
+    if (state->app == NULL) goto fail;
+
+    ghostty_surface_config_s surface_config = ghostty_surface_config_new();
+    surface_config.platform_tag = GHOSTTY_PLATFORM_OPENGL;
+    surface_config.platform.opengl.get_proc_address = opengl_get_proc_address;
+    surface_config.userdata = state;
+    surface_config.scale_factor = scale_factor;
+    ghostty_env_var_s environment[] = {
+        { .key = "TERM", .value = "xterm-256color" },
+        { .key = "COLORTERM", .value = "truecolor" },
+        { .key = "TERM_PROGRAM", .value = "gpui-ghostty" },
+    };
+    surface_config.working_directory = working_directory;
+    surface_config.command = command;
+    surface_config.env_vars = environment;
+    surface_config.env_var_count = sizeof(environment) / sizeof(environment[0]);
+    surface_config.wait_after_command = false;
+    surface_config.context = GHOSTTY_SURFACE_CONTEXT_WINDOW;
+    state->surface = ghostty_surface_new(state->app, &surface_config);
+    if (state->surface == NULL) goto fail;
+
+    ghostty_app_set_focus(state->app, false);
+    ghostty_surface_set_focus(state->surface, false);
+    clear_current(platform_userdata);
+    return state;
+
+fail:
+    if (state->surface != NULL) ghostty_surface_free(state->surface);
+    if (state->app != NULL) ghostty_app_free(state->app);
+    if (state->config != NULL) ghostty_config_free(state->config);
+    clear_current(platform_userdata);
+    free(state);
+    return NULL;
+}
+
+void zvim_ghostty_surface_linux_free(zvim_ghostty_surface *state) {
+    if (state == NULL) return;
+    bool current = state->make_current(state->platform_userdata);
+    if (state->surface != NULL) ghostty_surface_free(state->surface);
+    if (state->app != NULL) ghostty_app_free(state->app);
+    if (state->config != NULL) ghostty_config_free(state->config);
+    free(state->clipboard_write);
+    if (current) state->clear_current(state->platform_userdata);
+    free(state);
+}
+
+void zvim_ghostty_surface_linux_tick(zvim_ghostty_surface *state) {
+    if (state == NULL || state->app == NULL) return;
+    ghostty_app_tick(state->app);
+}
+
+bool zvim_ghostty_surface_linux_is_alive(const zvim_ghostty_surface *state) {
+    return state != NULL && atomic_load_explicit(&state->alive, memory_order_acquire) &&
+        !ghostty_surface_process_exited(state->surface);
+}
+
+bool zvim_ghostty_surface_linux_snapshot(
+    zvim_ghostty_surface *state,
+    uint8_t **pixels,
+    uint32_t *width,
+    uint32_t *height,
+    size_t *length
+) {
+    if (pixels == NULL || width == NULL || height == NULL || length == NULL) return false;
+    *pixels = NULL;
+    *width = 0;
+    *height = 0;
+    *length = 0;
+    if (state == NULL || state->surface == NULL || state->width == 0 || state->height == 0 ||
+        state->width > INT_MAX || state->height > INT_MAX) {
+        return false;
+    }
+
+    gl_pixel_store_i_fn pixel_store = NULL;
+    gl_read_buffer_fn read_buffer = NULL;
+    gl_read_pixels_fn read_pixels = NULL;
+    gl_get_error_fn get_error = NULL;
+    egl_proc symbol = opengl_get_proc_address("glPixelStorei");
+    memcpy(&pixel_store, &symbol, sizeof(pixel_store));
+    symbol = opengl_get_proc_address("glReadBuffer");
+    memcpy(&read_buffer, &symbol, sizeof(read_buffer));
+    symbol = opengl_get_proc_address("glReadPixels");
+    memcpy(&read_pixels, &symbol, sizeof(read_pixels));
+    symbol = opengl_get_proc_address("glGetError");
+    memcpy(&get_error, &symbol, sizeof(get_error));
+    if (pixel_store == NULL || read_buffer == NULL || read_pixels == NULL || get_error == NULL) {
+        return false;
+    }
+
+    size_t byte_length = (size_t)state->width * state->height * 4;
+    uint8_t *copy = malloc(byte_length);
+    if (copy == NULL || !state->make_current(state->platform_userdata)) {
+        free(copy);
+        return false;
+    }
+    ghostty_surface_draw(state->surface);
+    while (get_error() != 0) {}
+    pixel_store(GPUI_GL_PACK_ALIGNMENT, 1);
+    read_buffer(GPUI_GL_BACK);
+    read_pixels(
+        0,
+        0,
+        (int)state->width,
+        (int)state->height,
+        GPUI_GL_BGRA,
+        GPUI_GL_UNSIGNED_BYTE,
+        copy
+    );
+    unsigned int error = get_error();
+    state->clear_current(state->platform_userdata);
+    if (error != 0) {
+        free(copy);
+        return false;
+    }
+
+    *pixels = copy;
+    *width = state->width;
+    *height = state->height;
+    *length = byte_length;
+    return true;
+}
+
+void zvim_ghostty_surface_linux_snapshot_free(uint8_t *pixels) {
+    free(pixels);
+}
+
+void *zvim_ghostty_surface_linux_take_clipboard_read(
+    zvim_ghostty_surface *state,
+    bool *selection
+) {
+    if (state == NULL || state->clipboard_request == NULL) return NULL;
+    void *request = state->clipboard_request;
+    state->clipboard_request = NULL;
+    *selection = state->clipboard_location == GHOSTTY_CLIPBOARD_SELECTION;
+    return request;
+}
+
+void zvim_ghostty_surface_linux_complete_clipboard_read(
+    zvim_ghostty_surface *state,
+    void *request,
+    const char *text
+) {
+    if (state != NULL && state->surface != NULL && request != NULL && text != NULL) {
+        ghostty_surface_complete_clipboard_request(state->surface, text, request, false);
+    }
+}
+
+char *zvim_ghostty_surface_linux_take_clipboard_write(
+    zvim_ghostty_surface *state,
+    bool *selection
+) {
+    if (state == NULL || state->clipboard_write == NULL) return NULL;
+    char *text = state->clipboard_write;
+    state->clipboard_write = NULL;
+    *selection = state->clipboard_write_location == GHOSTTY_CLIPBOARD_SELECTION;
+    return text;
+}
+
+void zvim_ghostty_surface_linux_free_clipboard_write(char *text) {
+    free(text);
+}
+
+void zvim_ghostty_surface_linux_set_size(
+    zvim_ghostty_surface *state,
+    uint32_t width,
+    uint32_t height,
+    double scale_factor
+) {
+    if (state == NULL || state->surface == NULL || width == 0 || height == 0) return;
+    state->width = width;
+    state->height = height;
+    ghostty_surface_set_content_scale(state->surface, scale_factor, scale_factor);
+    ghostty_surface_set_size(state->surface, width, height);
+    ghostty_surface_refresh(state->surface);
+}
+
+void zvim_ghostty_surface_linux_set_visible(zvim_ghostty_surface *state, bool visible) {
+    if (state == NULL || state->surface == NULL) return;
+    ghostty_surface_set_occlusion(state->surface, visible);
+    if (visible) ghostty_surface_refresh(state->surface);
+}
+
+void zvim_ghostty_surface_linux_set_focus(zvim_ghostty_surface *state, bool focused) {
+    if (state == NULL || state->surface == NULL) return;
+    ghostty_app_set_focus(state->app, focused);
+    ghostty_surface_set_focus(state->surface, focused);
+}
+
+bool zvim_ghostty_surface_linux_key(
+    zvim_ghostty_surface *state,
+    int action,
+    int modifiers,
+    int consumed_modifiers,
+    uint32_t keycode,
+    const char *text,
+    uint32_t unshifted_codepoint
+) {
+    if (state == NULL || state->surface == NULL) return false;
+    ghostty_input_key_s event = {
+        .action = (ghostty_input_action_e)action,
+        .mods = (ghostty_input_mods_e)modifiers,
+        .consumed_mods = (ghostty_input_mods_e)consumed_modifiers,
+        .keycode = keycode,
+        .text = text,
+        .unshifted_codepoint = unshifted_codepoint,
+        .composing = false,
+    };
+    return ghostty_surface_key(state->surface, event);
+}
+
+void zvim_ghostty_surface_linux_text(
+    zvim_ghostty_surface *state,
+    const char *text,
+    size_t length
+) {
+    if (state != NULL && state->surface != NULL) ghostty_surface_text(state->surface, text, length);
+}
+
+void zvim_ghostty_surface_linux_mouse_position(
+    zvim_ghostty_surface *state,
+    double x,
+    double y,
+    int modifiers
+) {
+    if (state != NULL && state->surface != NULL) {
+        ghostty_surface_mouse_pos(state->surface, x, y, (ghostty_input_mods_e)modifiers);
+    }
+}
+
+void zvim_ghostty_surface_linux_mouse_button(
+    zvim_ghostty_surface *state,
+    int mouse_state,
+    int button,
+    int modifiers
+) {
+    if (state != NULL && state->surface != NULL) {
+        ghostty_surface_mouse_button(
+            state->surface,
+            (ghostty_input_mouse_state_e)mouse_state,
+            (ghostty_input_mouse_button_e)button,
+            (ghostty_input_mods_e)modifiers
+        );
+    }
+}
+
+void zvim_ghostty_surface_linux_mouse_scroll(
+    zvim_ghostty_surface *state,
+    double x,
+    double y,
+    int modifiers
+) {
+    if (state != NULL && state->surface != NULL) {
+        ghostty_surface_mouse_scroll(state->surface, x, y, modifiers);
+    }
+}
+
+// The baseline config remains owned by the surface. Only this surface is changed.
+bool zvim_ghostty_surface_linux_update_config(zvim_ghostty_surface *state, const char *path) {
+    if (state == NULL || state->surface == NULL) return false;
+    ghostty_config_t config = ghostty_config_clone(state->config);
+    if (config == NULL) return false;
+    if (path != NULL) ghostty_config_load_file(config, path);
+    ghostty_config_finalize(config);
+    ghostty_surface_update_config(state->surface, config);
+    ghostty_config_free(config);
+    return true;
+}
+
+bool zvim_ghostty_surface_linux_needs_confirm_quit(const zvim_ghostty_surface *state) {
+    return state != NULL && state->surface != NULL && ghostty_surface_needs_confirm_quit(state->surface);
+}

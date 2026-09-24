@@ -1,13 +1,13 @@
 [package]
 name = "zvim"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 license = "Apache-2.0"
 description = "A focused GPUI frontend for Neovim"
 
 [features]
 default = ["gui"]
-gui = ["dep:gpui", "dep:url"]
+gui = ["dep:gpui", "dep:url", "dep:gpui-libghostty"]
 
 [[bin]]
 name = "zvim"
@@ -16,6 +16,7 @@ required-features = ["gui"]
 
 [dependencies]
 anyhow = "1"
+tempfile = "3.27"
 rmpv = "1.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -23,6 +24,7 @@ directories = "6"
 async-channel = "2"
 gpui = { version = "=0.2.2", features = ["runtime_shaders"], optional = true }
 url = { version = "2", optional = true }
+gpui-libghostty = { package = "zvim-ghostty", path = "crates/zvim-ghostty", optional = true }
 
 [profile.release]
 lto = "thin"

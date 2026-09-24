@@ -14,7 +14,7 @@ spec.loader.exec_module(package)
 class ArchiveTests(unittest.TestCase):
     def test_zip_preserves_contents_with_pre_1980_timestamps(self):
         with tempfile.TemporaryDirectory() as temporary:
-            source = pathlib.Path(temporary) / 'zvim-windows-x86_64'
+            source = pathlib.Path(temporary) / 'zvim-macos-arm64'
             folder = source / 'licenses'
             folder.mkdir(parents=True)
             notice = folder / 'LICENSE.txt'
@@ -22,7 +22,7 @@ class ArchiveTests(unittest.TestCase):
             os.utime(notice, (31536000, 31536000))  # 1971, before the ZIP epoch.
             package.zip_directory(source)
             with zipfile.ZipFile(str(source) + '.zip') as archive:
-                name = 'zvim-windows-x86_64/licenses/LICENSE.txt'
+                name = 'zvim-macos-arm64/licenses/LICENSE.txt'
                 self.assertEqual(archive.read(name), b'example licence\n')
                 self.assertEqual(archive.getinfo(name).date_time[0], 1980)
                 self.assertIsNone(archive.testzip())

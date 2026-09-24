@@ -283,3 +283,146 @@ fn appearance_sync_preserves_base46_palette() {
     s.set_appearance(None);
     assert_eq!(eval(&s, snapshot), original);
 }
+
+#[test]
+fn native_terminal_bridge_uses_current_window_directory() {
+    let dir = std::env::temp_dir().join(format!("zvim-terminal-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let local = dir.join("project with ' quotes");
+    std::fs::create_dir_all(&local).unwrap();
+    let s = Session::spawn(&Launch {
+        clean: true,
+        working_directory: Some(dir.clone()),
+        state_directory: Some(dir.join("isolated")),
+        ..Default::default()
+    })
+    .unwrap();
+    s.initialize(80, 24).unwrap();
+    s.rpc
+        .request(
+            "nvim_exec_lua",
+            vec![
+                "vim.cmd.lcd(vim.fn.fnameescape(...))".into(),
+                Value::Array(vec![local.to_str().unwrap().into()]),
+            ],
+        )
+        .unwrap();
+    command(&s, "ZvimTerminal");
+    let start = Instant::now();
+    loop {
+        if let Ok(Event::Terminal(cwd)) = s.events.try_recv() {
+            assert_eq!(cwd.canonicalize().unwrap(), local.canonicalize().unwrap());
+            break;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "terminal notification missing"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    // The GUI command must not replace Neovim's own terminal buffers.
+    command(&s, "terminal");
+    assert_eq!(eval(&s, "&buftype"), "terminal".into());
+    drop(s);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn native_terminal_theme_tracks_colours_and_base46_without_restarting_editor() {
+    fn theme(
+        s: &Session,
+        predicate: impl Fn(&zvim::terminal_theme::TerminalTheme) -> bool,
+    ) -> zvim::terminal_theme::TerminalTheme {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if let Ok(Event::TerminalTheme(theme)) = s.events.try_recv()
+                && predicate(&theme)
+            {
+                return theme;
+            }
+            if Instant::now() >= deadline {
+                panic!(
+                    "terminal theme timed out: {:?}",
+                    s.take_frame().map(|g| g
+                        .cells
+                        .iter()
+                        .map(|c| c.text.as_str())
+                        .collect::<String>())
+                );
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+    let s = Session::spawn(&Launch {
+        clean: true,
+        state_directory: Some(
+            std::env::temp_dir().join(format!("zvim-theme-{}", std::process::id())),
+        ),
+        ..Default::default()
+    })
+    .unwrap();
+    s.initialize(80, 24).unwrap();
+    theme(&s, |_| true);
+    let pid = eval(&s, "getpid()");
+    command(&s, "hi Normal guifg=#abcdef guibg=#123456");
+    let direct = theme(&s, |t| t.0[0] == Some(0xabcdef) && t.0[1] == Some(0x123456));
+    assert!(direct.config(0, 0).contains("background = #123456"));
+    command(
+        &s,
+        "let g:terminal_color_1 = '#fedcba' | doautocmd ColorScheme",
+    );
+    theme(&s, |t| t.0[7] == Some(0xfedcba));
+    command(&s, "hi Visual guifg=#112233 guibg=#445566 gui=reverse");
+    theme(&s, |t| t.0[4] == Some(0x445566) && t.0[5] == Some(0x112233));
+    command(&s, "unlet g:terminal_color_1 | doautocmd ColorScheme");
+    theme(&s, |t| t.0[7].is_none());
+    // Model Base46's direct reload: its terminal globals can still be stale.
+    command(
+        &s,
+        "lua vim.g.colors_name=nil; vim.g.terminal_color_1='#010101'; package.loaded.nvconfig={}; package.loaded.base46={get_theme_tb=function() return {base08='#aabbcc'} end}; vim.api.nvim_exec_autocmds('User',{pattern='NvThemeReload'})",
+    );
+    theme(&s, |t| t.0[7] == Some(0xaabbcc));
+    assert_eq!(eval(&s, "getpid()"), pid);
+    s.rpc.send("nvim_command", vec!["qa!".into()]);
+}
+
+#[test]
+fn cancelling_gui_close_reports_completion_and_keeps_unsaved_editor_alive() {
+    let s = Session::spawn(&Launch {
+        clean: true,
+        state_directory: Some(
+            std::env::temp_dir().join(format!("zvim-close-{}", std::process::id())),
+        ),
+        ..Default::default()
+    })
+    .unwrap();
+    s.initialize(80, 24).unwrap();
+    command(&s, "call setline(1, 'keep this unsaved text')");
+    let pid = eval(&s, "getpid()");
+    s.close();
+    // Wait for the actual save prompt before cancelling it.
+    wait(&s, || {
+        s.take_frame().is_some_and(|grid| {
+            grid.cells
+                .iter()
+                .map(|cell| cell.text.as_str())
+                .collect::<String>()
+                .contains("ancel")
+        })
+    });
+    s.input("c");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match s.events.try_recv() {
+            Ok(Event::CloseReturned) => break,
+            Ok(Event::Exited(_)) => panic!("cancelled close exited Neovim"),
+            _ => {}
+        }
+        assert!(Instant::now() < deadline, "close cancellation not reported");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(eval(&s, "getpid()"), pid);
+    assert_eq!(eval(&s, "getline(1)"), "keep this unsaved text".into());
+    assert_eq!(eval(&s, "&modified"), 1.into());
+    s.rpc.send("nvim_command", vec!["qa!".into()]);
+}

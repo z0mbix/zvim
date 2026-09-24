@@ -34,6 +34,8 @@ jobs:
             target: macos-arm64
           - os: macos-15-intel
             target: macos-x86_64
+          - os: ubuntu-24.04
+            target: linux-x86_64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +46,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - name: Linux development libraries
+        if: runner.os == 'Linux'
+        run: bash scripts/linux-dependencies.sh
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -71,7 +79,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          pattern: zvim-*
+          pattern: zvim-macos-*
           path: release
           merge-multiple: true
       - name: Version archives and generate checksums

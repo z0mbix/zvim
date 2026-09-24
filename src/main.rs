@@ -1,8 +1,10 @@
 mod preferences;
+mod terminal;
 mod ui;
 use gpui::*;
 use zvim::session::Launch;
 fn main() {
+    terminal::configure_resources();
     zvim::startup::mark("main");
     let cli = match zvim::cli::parse(
         std::env::args_os().skip(1),
@@ -91,6 +93,8 @@ fn main() {
         )]);
         cx.on_action(|_: &ui::Quit, cx| cx.defer(ui::request_close_all));
         cx.bind_keys([
+            KeyBinding::new("ctrl-`", ui::ToggleTerminal, Some("ZvimWindow")),
+            KeyBinding::new("cmd-w", ui::Close, Some("ZvimWindow")),
             KeyBinding::new("cmd-q", ui::Quit, None),
             KeyBinding::new("cmd-n", ui::NewWindow, None),
         ]);
@@ -108,6 +112,13 @@ fn main() {
                 items: vec![
                     MenuItem::action("Open…", ui::Open),
                     MenuItem::action("Close Window", ui::Close),
+                ],
+            },
+            Menu {
+                name: "Terminal".into(),
+                items: vec![
+                    MenuItem::action("Show / Hide Terminal", ui::ToggleTerminal),
+                    MenuItem::action("Close Terminal…", ui::CloseTerminal),
                 ],
             },
             Menu {
@@ -140,11 +151,6 @@ fn detach(args: &[std::ffi::OsString]) -> anyhow::Result<()> {
     {
         use std::os::unix::process::CommandExt;
         command.process_group(0);
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x00000208);
     }
     command.spawn()?;
     Ok(())

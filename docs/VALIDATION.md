@@ -1,6 +1,6 @@
 # Validation status
 
-This is a macOS prototype with cross-platform source/build infrastructure. Do not label it a validated three-platform v1 yet.
+Zvim targets macOS and Linux only. Linux runtime behaviour still requires validation.
 
 ## Verified locally (2026-09-23, macOS arm64)
 
@@ -25,7 +25,7 @@ This is a macOS prototype with cross-platform source/build infrastructure. Do no
 - Tab navigation and Space activation verified after correcting explicit GPUI focus-handle tab stops. Final layout shows all controls and footer.
 - Quit closes both settings and editor windows. Preferences restored after testing; rebuilt app signature verified.
 - Unit coverage checks missing-field defaults, persistence independent of window geometry, and malformed preferences. Real-editor coverage checks light/dark switching, restoration, and preserving a manual background change.
-- Live OS appearance changes, independently launched instance activation reloads, and Linux/Windows settings UI still require runtime QA.
+- Live OS appearance changes, independently launched instance activation reloads, and Linux settings UI still require runtime QA.
 
 ## Base46 appearance regression (2026-09-24)
 
@@ -36,11 +36,11 @@ This is a macOS prototype with cross-platform source/build infrastructure. Do no
 ## Still required before v1
 
 - Broader interactive testing on Intel macOS. Both macOS architectures have passed CI tests, Clippy, release compilation and packaging.
-- Linux and Windows remain outside the current release scope. CI exercised their tests and builds during initial release preparation; Windows packaging needed a ZIP timestamp fix.
-- Runtime tests on Linux under Wayland and X11, and on Windows with display scaling and AltGr layouts.
+- Linux remains outside the current release artifacts; Linux CI builds require validation with the new Ghostty dependency.
+- Runtime tests on Linux under Wayland; editor-only runtime checks on X11.
 - Comprehensive IME/CJK input and candidate placement, less common font fallbacks, mixed-DPI monitor transitions, drag/drop, and accessibility review.
 - Resolve an intermittent `CmdlineChanged` Lua callback error observed in the existing configuration. It did not reproduce in a separate embedded-editor diagnostic session; its cause is not yet established. Broader plugin workflow compatibility is not certified.
-- Public signing/notarisation, broader Linux distribution compatibility, and Windows distribution QA.
+- Public signing/notarisation, broader Linux distribution compatibility.
 
 ## Performance
 
@@ -65,3 +65,33 @@ For experimental local builds, install:
 ```sh
 sudo apt-get install build-essential clang cmake pkg-config libasound2-dev libfontconfig1-dev libfreetype6-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libxcb1-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxinerama-dev libxkbcommon-dev libvulkan-dev libssl-dev libzstd-dev
 ```
+
+## Native Ghostty trial (2026-09-24, macOS arm64)
+
+- Pinned gpui-libghostty 0.3.0 and its native Ghostty renderer compiled with Zig 0.16.0 against the existing GPUI 0.2.2. Release build and local app packaging/ad-hoc signing passed. Linked libraries are system frameworks/libraries; no Homebrew dylib dependency was found.
+- All 22 Rust tests passed, including a real-Neovim notification test for quoted window-local working directories and preservation of Neovim's built-in terminal. Formatting, strict Clippy, Python script syntax and the packaging regression test passed.
+- In an isolated app copy: shell command input/output, Ctrl-C interruption, Unicode clipboard paste, ANSI colours, window resize, hide/show with preserved output, terminal-close confirmation, cancellation preserving the shell, and confirmed app teardown were exercised.
+- Rose Pine Moon loaded from the bundled theme resources. A generated PNG displayed through Kitty graphics. These checks establish basic native rendering, not full graphics-protocol or standalone Ghostty parity.
+- Fixed resize/input attempts after Neovim exit when terminal-close confirmation is cancelled; the terminal remains usable beside an explicit exited-editor message.
+- Automated background launches initially produced blank/occluded screenshots. Opening the app normally through Finder restored the editor and first terminal opening without a resize. This was not established as a Ghostty rendering failure. The final pane layout uses explicit viewport-derived heights and refreshes after native attachment.
+- Linux/Wayland, Intel macOS, IME/dead-key composition, mixed-DPI displays, search, multiple sessions, comprehensive keyboard protocols and sustained performance remain unvalidated or unimplemented as detailed in `TERMINAL.md`. No comparison against standalone Ghostty performance is claimed.
+
+## Live terminal theme sync (2026-09-24)
+
+- `cargo test --locked --offline`: all 25 tests passed. The real-Neovim theme test covers direct `Normal`/`Visual` updates, `ColorScheme`, missing palette entries, reverse video and Base46's `NvThemeReload` with stale terminal globals.
+- `cargo fmt --all -- --check`, strict Clippy over all targets and the release build passed. Existing dependency future-compatibility warnings remain.
+- `python3 scripts/test-terminal-theme.py` passed with native macOS access: Metal pixels changed to the supplied background and returned to the baseline; the same live surface retained earlier output and accepted new input. The test allows a small RGB tolerance for macOS display colour conversion. The sandbox itself cannot create a Metal device.
+- The bridge is implemented for both platform shims, but Linux/Wayland runtime validation is still outstanding. The native smoke test currently targets macOS only (`just check-terminal-theme`).
+
+## Settings CLI installer (2026-09-24)
+
+The Settings page now installs the CLI through Rust filesystem APIs, with a saved bin directory, native folder chooser and a default of `~/.local/bin`. No Python or installer subprocess is used. The installer creates an executable launcher pointing to the current app, updates Zvim-managed launchers, and refuses unrelated files, directories and symlinks. App Translocation requires moving and reopening the app before installation.
+
+All 27 Rust/Neovim tests passed, including execution of an installed launcher from a quoted app path, exact argument/cwd forwarding, reinstalling, and collision protection. Preference tests also verify the custom bin directory round trip and backwards-compatible defaults. Formatting and strict Clippy passed. Native Settings UI interaction and Linux desktop integration were not exercised in this check.
+
+## Terminal close experience (2026-09-24)
+
+- All 28 Rust/Neovim tests passed. A new real-Neovim test waits for the unsaved-buffer prompt, cancels it, receives the close-return notification and verifies the same editor PID and unsaved text remain intact.
+- The native macOS test verifies Ghostty requires confirmation for a running program, recognises an idle zsh prompt using isolated shell integration, then requires confirmation after starting `sleep` with a real Enter key. Existing Metal snapshot and live-theme checks still pass.
+- Window close and Quit now confirm terminal shutdown before initiating Neovim exit, with a captured terminal frame behind the modal. Cancelling the terminal question leaves the editor running; cancelling a subsequent Neovim save prompt resets the close attempt. Direct editor exit retains a full-window terminal if the user chooses Keep Terminal.
+- Neovim exit-hook cancellation was tested and rejected because an ExitPre exception does not reliably stop `:qall`. No interception hook remains in the implementation. Linux close detection and the full GPUI modal interaction still need interactive runtime QA; tests above exercise the native renderer and Neovim protocol independently.

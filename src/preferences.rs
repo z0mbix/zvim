@@ -25,7 +25,11 @@ enum Choice {
     Theme(Theme),
     Geometry,
     Sync,
+    TerminalTheme,
     Diagnostics,
+    CliDirectory,
+    CliDefault,
+    CliInstall,
     Icon(&'static str),
 }
 
@@ -33,6 +37,8 @@ pub struct PreferencesView {
     focus: FocusHandle,
     buttons: Vec<FocusHandle>,
     error: Option<String>,
+    cli_message: Option<String>,
+    cli_installing: bool,
     icon_images: std::collections::HashMap<&'static str, Arc<Image>>,
 }
 impl PreferencesView {
@@ -56,7 +62,9 @@ impl PreferencesView {
                 })
                 .collect(),
             focus,
-            buttons: (0..(6 + APP_ICONS.len()) as isize)
+            cli_message: None,
+            cli_installing: false,
+            buttons: (0..(10 + APP_ICONS.len()) as isize)
                 .map(|i| cx.focus_handle().tab_index(i).tab_stop(true))
                 .collect(),
             error: Preferences::load()
@@ -65,6 +73,68 @@ impl PreferencesView {
         }
     }
     fn choose(&mut self, choice: Choice, cx: &mut Context<Self>) {
+        match choice {
+            Choice::CliDirectory => {
+                if self.cli_installing {
+                    return;
+                }
+                let result = cx.prompt_for_paths(PathPromptOptions {
+                    files: false,
+                    directories: true,
+                    multiple: false,
+                    prompt: Some("Choose bin directory".into()),
+                });
+                cx.spawn(async move |view, cx| {
+                    let result = result.await;
+                    let _ = view.update(cx, |view, cx| match result {
+                        Ok(Ok(Some(paths))) => {
+                            if let Some(path) = paths.into_iter().next() {
+                                view.save_cli_directory(path, cx);
+                            }
+                        }
+                        Ok(Ok(None)) => {}
+                        _ => {
+                            view.cli_message =
+                                Some("Could not open the folder chooser. Please try again.".into());
+                            cx.notify();
+                        }
+                    });
+                })
+                .detach();
+                return;
+            }
+            Choice::CliDefault => {
+                if !self.cli_installing {
+                    self.save_cli_directory(zvim::cli_install::default_bin_directory(), cx);
+                }
+                return;
+            }
+            Choice::CliInstall => {
+                if self.cli_installing {
+                    return;
+                }
+                self.cli_installing = true;
+                self.cli_message = None;
+                let directory = cx.global::<AppPreferences>().0.cli_bin_directory.clone();
+                let task = cx
+                    .background_executor()
+                    .spawn(async move { zvim::cli_install::install_current(&directory) });
+                cx.spawn(async move |view, cx| {
+                    let result = task.await;
+                    let _ = view.update(cx, |view, cx| {
+                        view.cli_installing = false;
+                        view.cli_message = Some(match result {
+                            Ok(path) => format!("Installed {}. You can now use zvim from a shell with this directory on PATH.", path.display()),
+                            Err(error) => format!("Could not install: {error:#}"),
+                        });
+                        cx.notify();
+                    });
+                }).detach();
+                cx.notify();
+                return;
+            }
+            _ => {}
+        }
         if matches!(choice, Choice::Diagnostics) {
             let dir = zvim::settings::data_dir();
             match std::fs::create_dir_all(&dir) {
@@ -80,8 +150,12 @@ impl PreferencesView {
                 Choice::Theme(theme) => p.theme = theme,
                 Choice::Icon(id) => p.app_icon = id.into(),
                 Choice::Geometry => p.remember_window_geometry = !p.remember_window_geometry,
+                Choice::TerminalTheme => p.terminal_follow_neovim = !p.terminal_follow_neovim,
                 Choice::Sync => p.sync_editor_appearance = !p.sync_editor_appearance,
-                Choice::Diagnostics => unreachable!(),
+                Choice::Diagnostics
+                | Choice::CliDirectory
+                | Choice::CliDefault
+                | Choice::CliInstall => unreachable!(),
             }
             p.save()?;
             cx.set_global(AppPreferences(p));
@@ -92,6 +166,20 @@ impl PreferencesView {
             .map(|e| format!("Settings were not saved: {e}"));
         cx.notify();
     }
+    fn save_cli_directory(&mut self, directory: std::path::PathBuf, cx: &mut Context<Self>) {
+        let result = (|| -> anyhow::Result<()> {
+            let mut preferences = Preferences::load()?;
+            preferences.cli_bin_directory = directory;
+            preferences.save()?;
+            cx.set_global(AppPreferences(preferences));
+            Ok(())
+        })();
+        self.cli_message = result
+            .err()
+            .map(|error| format!("Directory was not saved: {error}"));
+        cx.notify();
+    }
+
     fn button(
         &self,
         index: usize,
@@ -177,16 +265,31 @@ impl Render for PreferencesView {
                     .child(self.button(4, if p.remember_window_geometry {"On"} else {"Off"},p.remember_window_geometry,Choice::Geometry,d,cx)))
                 .child(div().text_color(muted).child("New windows use the last saved placement. When off, they open centred at the default size. Files and sessions are not restored.")))
             .child(div().flex().flex_col().gap_3()
+                .child(div().flex().items_center().justify_between().gap_4()
+                    .child(div().font_weight(FontWeight::SEMIBOLD).child("Terminal theme"))
+                    .child(self.button(5, if p.terminal_follow_neovim {"Follow Neovim"} else {"Use Ghostty theme"},p.terminal_follow_neovim,Choice::TerminalTheme,d,cx)))
+                .child(div().text_color(muted).child("Updates terminal colours live. Fonts, shell settings and keybindings use your Ghostty configuration.")))
+            .child(div().flex().flex_col().gap_3()
                 .child(div().font_weight(FontWeight::SEMIBOLD).child("Application icon"))
                 .child(div().flex().items_center().gap_4()
                     .child(img(self.icon_images[resolve(&p.app_icon).id].clone())
                         .w(px(64.)).h(px(64.)))
                     .children(APP_ICONS.iter().enumerate().map(|(i, icon)|
-                        self.button(5+i, icon.label, resolve(&p.app_icon).id == icon.id, Choice::Icon(icon.id), d, cx))))
+                        self.button(6+i, icon.label, resolve(&p.app_icon).id == icon.id, Choice::Icon(icon.id), d, cx))))
                 .child(div().text_color(muted).child("The Neovim icon is included in this build. More icon choices can be added in future releases.")))
             .child(div().flex().flex_col().gap_3()
+                .child(div().font_weight(FontWeight::SEMIBOLD).child("Command-line launcher"))
+                .child(div().text_color(muted).child("Install the zvim command for this app. No Python or additional tools are needed."))
+                .child(div().child(format!("Bin directory: {}", p.cli_bin_directory.display())))
+                .child(div().flex().flex_wrap().gap_2()
+                    .child(self.button(6+APP_ICONS.len(), "Choose folder…", false, Choice::CliDirectory, d, cx))
+                    .child(self.button(7+APP_ICONS.len(), "Use default", false, Choice::CliDefault, d, cx))
+                    .child(self.button(8+APP_ICONS.len(), if self.cli_installing {"Installing…"} else {"Install / update zvim"}, false, Choice::CliInstall, d, cx)))
+                .child(div().text_color(muted).child("Choose a writable folder on your shell’s PATH. The default is ~/.local/bin; it will be created if needed. If you move the app, install the command again. Changing folders leaves any previous launcher in place."))
+                .when_some(self.cli_message.clone(), |d, message| d.child(div().child(message))))
+            .child(div().flex().flex_col().gap_3()
                 .child(div().font_weight(FontWeight::SEMIBOLD).child("Troubleshooting"))
-                .child(div().flex().child(self.button(5+APP_ICONS.len(),"Open diagnostics folder",false,Choice::Diagnostics,d,cx))))
+                .child(div().flex().child(self.button(9+APP_ICONS.len(),"Open diagnostics folder",false,Choice::Diagnostics,d,cx))))
             .child(div().text_sm().text_color(muted).child("Changes save automatically. Fonts, plugins and editing preferences stay in your Neovim configuration."))
             .when_some(self.error.clone(), |d,e| d.child(div().text_color(rgb(0xd75b65)).child(e)))
     }

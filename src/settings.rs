@@ -65,7 +65,9 @@ pub struct Preferences {
     pub remember_window_geometry: bool,
     pub theme: Theme,
     pub sync_editor_appearance: bool,
+    pub terminal_follow_neovim: bool,
     pub app_icon: String,
+    pub cli_bin_directory: PathBuf,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -73,7 +75,9 @@ impl Default for Preferences {
             remember_window_geometry: true,
             theme: Theme::System,
             sync_editor_appearance: false,
+            terminal_follow_neovim: true,
             app_icon: crate::icons::DEFAULT_ICON_ID.into(),
+            cli_bin_directory: crate::cli_install::default_bin_directory(),
         }
     }
 }
@@ -109,6 +113,11 @@ mod tests {
         assert!(p.remember_window_geometry);
         assert_eq!(p.app_icon, crate::icons::DEFAULT_ICON_ID);
         assert!(!p.sync_editor_appearance);
+        assert!(p.terminal_follow_neovim);
+        assert_eq!(
+            p.cli_bin_directory,
+            crate::cli_install::default_bin_directory()
+        );
         assert!(p.theme.is_dark(false));
         assert!(!Theme::Light.is_dark(true));
         assert!(Theme::System.is_dark(true));
@@ -139,7 +148,9 @@ mod tests {
             theme: Theme::Light,
             remember_window_geometry: false,
             sync_editor_appearance: true,
+            terminal_follow_neovim: false,
             app_icon: crate::icons::DEFAULT_ICON_ID.into(),
+            cli_bin_directory: dir.join("custom bin"),
         };
         p.save_to(&dir).unwrap();
         assert_eq!(Preferences::load_from(&dir).unwrap(), p);

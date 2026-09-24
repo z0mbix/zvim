@@ -6,3 +6,6 @@
 - `Cargo.lock` pins Rust dependencies. `scripts/licenses.py` copies supplied licence/notice files and generates `licenses/DEPENDENCIES.md` inside each package. That inventory includes build dependencies.
 
 Declared package licences and copied notices are an inventory, not a blanket legal compatibility certification. Review the exact dependency tree when changing versions or preparing public releases. Do not use Zed branding or logos for this application.
+
+- gpui-libghostty 0.3.0 at `bfa3771f0ef2290e54acf9f1fc11e05d42a882ee`: MIT. `src/terminal.rs` adapts its GPUI adapter for GPUI 0.2.2 and Zvim input/lifecycle handling; see `packaging/GPUI-GHOSTTY-LICENSE.txt`. `crates/zvim-ghostty` carries its native wrapper and shims with a live configuration extension, and the matching Ghostty header and MIT notices.
+- Its vendored Ghostty at `9f0e1719dc918368367d368bfe300f59bb68b5a4`: MIT, with upstream embedder patches for native macOS and Wayland surfaces. Packaging collects the vendored licence files as well as Cargo dependencies.

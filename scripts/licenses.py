@@ -17,10 +17,17 @@ def collect(destination):
         if p.get('license_file'):
             file = folder/p['license_file']
             if file.exists() and file not in files: files.append(file)
+        if p['name'] == 'zvim-ghostty':
+            files.append(folder/'GHOSTTY-LICENSE')
+        if p['name'] == 'gpui-libghostty':
+            files += list((folder/'vendor/ghostty').rglob('LICENSE*'))
         if files:
             out.mkdir(exist_ok=True)
-            for f in files: shutil.copy2(f,out/f.name)
+            for f in files:
+                name = str(f.relative_to(folder)).replace('/', '__')
+                shutil.copy2(f,out/name)
     (destination/'DEPENDENCIES.md').write_text('\n'.join(notices)+'\n')
     shutil.copy2(ROOT/'packaging/NEOVIM-LICENSE.txt',destination/'NEOVIM-LICENSE.txt')
+    shutil.copy2(ROOT/'packaging/GPUI-GHOSTTY-LICENSE.txt',destination/'GPUI-GHOSTTY-LICENSE.txt')
 
     shutil.copy2(ROOT/'packaging/NEOVIM-LOGO-NOTICE.txt',destination/'NEOVIM-LOGO-NOTICE.txt')

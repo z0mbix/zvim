@@ -9,25 +9,22 @@ def default_app():
     for parent in here.parents:
         if parent.suffix == '.app': return parent
     if (here.parent/'zvim').exists(): return here.parent/'zvim'
-    if (here.parent/'zvim.exe').exists(): return here.parent/'zvim.exe'
-    system={'Darwin':'macos','Linux':'linux','Windows':'windows'}[platform.system()]
+    system={'Darwin':'macos','Linux':'linux'}[platform.system()]
     arch='arm64' if platform.machine().lower() in ('arm64','aarch64') else 'x86_64'
     folder=here.parent.parent/'dist'/f'zvim-{system}-{arch}'
-    return folder/('Zvim.app' if system=='macos' else 'zvim.exe' if system=='windows' else 'zvim')
+    return folder/('Zvim.app' if system=='macos' else 'zvim')
 
 def install(app, directory):
+    if platform.system() not in ('Darwin', 'Linux'): raise SystemExit('Zvim supports macOS and Linux only.')
     app=app.expanduser().resolve()
     binary=app/'Contents/MacOS/zvim' if app.suffix=='.app' else app
     if not binary.is_file(): raise SystemExit(f'Zvim executable not found: {binary}. Build/package first, or pass --app PATH.')
     directory=directory.expanduser().resolve();directory.mkdir(parents=True,exist_ok=True)
-    windows=platform.system()=='Windows';dest=directory/('zvim.cmd' if windows else 'zvim')
+    dest=directory/'zvim'
     if dest.exists() or dest.is_symlink():
         if dest.is_symlink() or MARKER not in dest.read_text(errors='replace'):
             raise SystemExit(f'Refusing to replace an unrelated existing command: {dest}')
-    if windows:
-        content=f'@echo off\nrem {MARKER}\n"{binary}" --zvim-launch %*\n'
-    else:
-        content=f'#!/bin/sh\n# {MARKER}\nexec {shlex.quote(str(binary))} --zvim-launch "$@"\n'
+    content=f'#!/bin/sh\n# {MARKER}\nexec {shlex.quote(str(binary))} --zvim-launch "$@"\n'
     temporary=dest.with_suffix('.tmp');temporary.write_text(content);temporary.chmod(0o755);temporary.replace(dest)
     print(f'Installed {dest} -> {binary}')
     if directory not in [pathlib.Path(p).expanduser().resolve() for p in os.environ.get('PATH','').split(os.pathsep) if p]:

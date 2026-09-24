@@ -2181,6 +2181,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpui-libghostty"
+version = "0.3.0"
+source = "git+https://github.com/behzade/gpui-libghostty?rev=bfa3771f0ef2290e54acf9f1fc11e05d42a882ee#bfa3771f0ef2290e54acf9f1fc11e05d42a882ee"
+dependencies = [
+ "async-channel 2.5.0",
+ "image",
+ "khronos-egl",
+ "libc",
+ "libloading",
+ "raw-window-handle",
+ "tempfile",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols 0.32.13",
+]
+
+[[package]]
 name = "gpui-macros"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7269,7 +7286,7 @@ dependencies = [
 
 [[package]]
 name = "zvim"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "async-channel 2.5.0",
@@ -7278,5 +7295,25 @@ dependencies = [
  "rmpv",
  "serde",
  "serde_json",
+ "tempfile",
  "url",
+ "zvim-ghostty",
+]
+
+[[package]]
+name = "zvim-ghostty"
+version = "0.1.0"
+dependencies = [
+ "async-channel 2.5.0",
+ "cc",
+ "gpui-libghostty",
+ "image",
+ "khronos-egl",
+ "libc",
+ "libloading",
+ "raw-window-handle",
+ "tempfile",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols 0.32.13",
 ]
