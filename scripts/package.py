@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """Package an already-built native binary with the verified Neovim runtime."""
-import argparse, importlib.util, pathlib, platform, plistlib, shutil, subprocess
+import argparse, importlib.util, pathlib, platform, plistlib, shutil, subprocess, zipfile
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 def module(name, path):
     spec=importlib.util.spec_from_file_location(name,path);mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod);return mod
+
+def zip_directory(source):
+    # Some dependency licence files have Unix-epoch timestamps; ZIP starts at 1980.
+    with zipfile.ZipFile(str(source)+'.zip', 'w', compression=zipfile.ZIP_DEFLATED,
+                         strict_timestamps=False) as archive:
+        for path in sorted(source.rglob('*')):
+            archive.write(path, path.relative_to(source.parent))
 
 def main():
     version=module('version',ROOT/'scripts/version.py').version()
@@ -35,6 +42,6 @@ def main():
         if platform.system()=='Linux':
             shutil.copy2(ROOT/'packaging/zvim.desktop',dest/'zvim.desktop')
             shutil.make_archive(str(dest),'gztar',dist,dest.name)
-        else:shutil.make_archive(str(dest),'zip',dist,dest.name)
+        else:zip_directory(dest)
     print(dest)
 if __name__=='__main__':main()
