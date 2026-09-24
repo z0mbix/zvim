@@ -164,8 +164,10 @@ fn cli_layout_flags_reach_neovim() {
         assert_eq!(eval(&s, expression), expected, "{flag}");
         assert_eq!(eval(&s, "argc()"), 2.into());
         assert_eq!(
-            eval(&s, "getcwd()"),
-            dir.canonicalize().unwrap().to_str().unwrap().into()
+            std::path::Path::new(eval(&s, "getcwd()").as_str().unwrap())
+                .canonicalize()
+                .unwrap(),
+            dir.canonicalize().unwrap()
         );
     }
     std::fs::remove_dir_all(dir).unwrap();
@@ -197,8 +199,10 @@ fn cli_project_directory_precedes_configuration_and_commands() {
     let s = Session::spawn(&cli.launch).unwrap();
     s.initialize(80, 24).unwrap();
     assert_eq!(
-        eval(&s, "g:initial_cwd"),
-        dir.canonicalize().unwrap().to_str().unwrap().into()
+        std::path::Path::new(eval(&s, "g:initial_cwd").as_str().unwrap())
+            .canonicalize()
+            .unwrap(),
+        dir.canonicalize().unwrap()
     );
     assert_eq!(eval(&s, "g:initial_zvim"), true.into());
     assert_eq!(eval(&s, "g:sequence"), "before-config-after".into());
