@@ -1,3 +1,4 @@
+mod about;
 mod preferences;
 mod terminal;
 mod ui;
@@ -74,6 +75,12 @@ fn main() {
             }
         })
         .detach();
+        cx.on_app_quit(|cx| {
+            cx.background_executor().spawn(async {
+                zvim::geometry_writer::flush();
+            })
+        })
+        .detach();
         cx.on_window_closed(|cx| {
             if cx.windows().is_empty() {
                 cx.quit();
@@ -82,6 +89,7 @@ fn main() {
         .detach();
         cx.on_action(|_: &ui::NewWindow, cx| ui::open_window(Launch::default(), cx));
         cx.on_action(|_: &ui::OpenSettings, cx| cx.defer(preferences::open));
+        cx.on_action(|_: &ui::About, cx| cx.defer(about::open));
         cx.on_action(|_: &ui::Quit, cx| cx.defer(ui::request_close_all));
         preferences::bind_keys(cx);
         cx.observe_global::<preferences::AppPreferences>(preferences::bind_keys)
@@ -90,6 +98,8 @@ fn main() {
             Menu {
                 name: "Zvim".into(),
                 items: vec![
+                    MenuItem::action("About Zvim", ui::About),
+                    MenuItem::Separator,
                     MenuItem::action("Settings…", ui::OpenSettings),
                     MenuItem::action("New Window", ui::NewWindow),
                     MenuItem::action("Quit Zvim", ui::Quit),
@@ -108,6 +118,12 @@ fn main() {
                     MenuItem::action("Show / Hide Terminal", ui::ToggleTerminal),
                     MenuItem::action("Focus Terminal / Editor", ui::FocusTerminal),
                     MenuItem::action("New Terminal Tab", ui::NewTerminal),
+                    MenuItem::action("Split Right", ui::SplitTerminalRight),
+                    MenuItem::action("Split Down", ui::SplitTerminalDown),
+                    MenuItem::action("Focus Pane Left", ui::TerminalPaneLeft),
+                    MenuItem::action("Focus Pane Right", ui::TerminalPaneRight),
+                    MenuItem::action("Focus Pane Above", ui::TerminalPaneUp),
+                    MenuItem::action("Focus Pane Below", ui::TerminalPaneDown),
                     MenuItem::action("Previous Terminal Tab", ui::PreviousTerminal),
                     MenuItem::action("Next Terminal Tab", ui::NextTerminal),
                     MenuItem::action("Maximise / Restore Terminal", ui::MaximizeTerminal),

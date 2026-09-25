@@ -40,6 +40,12 @@ impl<T> TerminalTabs<T> {
         self.entries.is_empty()
     }
 
+    pub fn push_with_id(&mut self, id: u64, value: T) {
+        self.entries.push((id, value));
+        self.next_id = self.next_id.max(id + 1);
+        self.active = self.entries.len() - 1;
+    }
+
     pub fn push(&mut self, value: T) {
         self.entries.push((self.next_id, value));
         self.next_id += 1;

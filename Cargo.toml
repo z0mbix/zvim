@@ -1,6 +1,6 @@
 [package]
 name = "zvim"
-version = "0.0.4"
+version = "0.0.5"
 edition = "2024"
 license = "Apache-2.0"
 description = "A focused GPUI frontend for Neovim"
@@ -30,3 +30,8 @@ gpui-libghostty = { package = "zvim-ghostty", path = "crates/zvim-ghostty", opti
 lto = "thin"
 codegen-units = 1
 strip = "debuginfo"
+
+[[example]]
+name = "performance_ui"
+required-features = ["gui"]
+test = false

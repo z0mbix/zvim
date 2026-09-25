@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
     pub width: f32,
@@ -31,12 +31,14 @@ impl Settings {
             .and_then(|s| serde_json::from_slice(&s).ok())
             .unwrap_or_default()
     }
-    pub fn save(&self) {
-        let dir = data_dir();
-        if std::fs::create_dir_all(&dir).is_ok() {
-            let path = dir.join("window.json");
-            let _ = std::fs::write(path, serde_json::to_vec_pretty(self).unwrap_or_default());
-        }
+    pub fn save_to(&self, dir: &std::path::Path) -> anyhow::Result<()> {
+        use std::io::Write;
+        std::fs::create_dir_all(dir)?;
+        let mut file = tempfile::NamedTempFile::new_in(dir)?;
+        serde_json::to_writer_pretty(&mut file, self)?;
+        file.flush()?;
+        file.persist(dir.join("window.json"))?;
+        Ok(())
     }
 }
 
@@ -73,6 +75,10 @@ pub struct Preferences {
     pub terminal_close_key: String,
     pub terminal_previous_key: String,
     pub terminal_next_key: String,
+    pub terminal_split_right_key: String,
+    pub terminal_split_down_key: String,
+    pub terminal_pane_left_key: String,
+    pub terminal_pane_right_key: String,
     #[serde(default)]
     pub terminal_keymap_version: u8,
     pub app_icon: String,
@@ -92,6 +98,10 @@ impl Default for Preferences {
             terminal_close_key: "cmd-w".into(),
             terminal_previous_key: "cmd-shift-[".into(),
             terminal_next_key: "cmd-shift-]".into(),
+            terminal_split_right_key: "cmd-d".into(),
+            terminal_split_down_key: "cmd-shift-d".into(),
+            terminal_pane_left_key: "cmd-[".into(),
+            terminal_pane_right_key: "cmd-]".into(),
             terminal_keymap_version: 1,
             app_icon: crate::icons::DEFAULT_ICON_ID.into(),
             cli_bin_directory: crate::cli_install::default_bin_directory(),
@@ -146,10 +156,14 @@ pub enum TerminalShortcut {
     Close,
     Previous,
     Next,
+    SplitRight,
+    SplitDown,
+    PaneLeft,
+    PaneRight,
 }
 
 impl TerminalShortcut {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 11] = [
         Self::Toggle,
         Self::Focus,
         Self::Maximize,
@@ -157,6 +171,10 @@ impl TerminalShortcut {
         Self::Close,
         Self::Previous,
         Self::Next,
+        Self::SplitRight,
+        Self::SplitDown,
+        Self::PaneLeft,
+        Self::PaneRight,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -167,6 +185,10 @@ impl TerminalShortcut {
             Self::Close => "Close terminal tab",
             Self::Previous => "Previous terminal tab",
             Self::Next => "Next terminal tab",
+            Self::SplitRight => "Split terminal right",
+            Self::SplitDown => "Split terminal down",
+            Self::PaneLeft => "Focus terminal pane left",
+            Self::PaneRight => "Focus terminal pane right",
         }
     }
     pub fn key(self, p: &Preferences) -> &str {
@@ -178,6 +200,10 @@ impl TerminalShortcut {
             Self::Close => &p.terminal_close_key,
             Self::Previous => &p.terminal_previous_key,
             Self::Next => &p.terminal_next_key,
+            Self::SplitRight => &p.terminal_split_right_key,
+            Self::SplitDown => &p.terminal_split_down_key,
+            Self::PaneLeft => &p.terminal_pane_left_key,
+            Self::PaneRight => &p.terminal_pane_right_key,
         }
     }
     pub fn set(self, p: &mut Preferences, key: String) {
@@ -189,6 +215,10 @@ impl TerminalShortcut {
             Self::Close => &mut p.terminal_close_key,
             Self::Previous => &mut p.terminal_previous_key,
             Self::Next => &mut p.terminal_next_key,
+            Self::SplitRight => &mut p.terminal_split_right_key,
+            Self::SplitDown => &mut p.terminal_split_down_key,
+            Self::PaneLeft => &mut p.terminal_pane_left_key,
+            Self::PaneRight => &mut p.terminal_pane_right_key,
         } = key;
     }
 }

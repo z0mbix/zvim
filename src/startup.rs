@@ -14,3 +14,23 @@ pub fn mark(stage: &str) {
         );
     }
 }
+
+/// Optional CPU timing for a synchronous stage, including early returns.
+pub struct Span(Option<&'static str>);
+impl Span {
+    pub fn new(begin: &'static str, end: &'static str) -> Self {
+        if enabled() {
+            mark(begin);
+            Self(Some(end))
+        } else {
+            Self(None)
+        }
+    }
+}
+impl Drop for Span {
+    fn drop(&mut self) {
+        if let Some(end) = self.0 {
+            mark(end);
+        }
+    }
+}

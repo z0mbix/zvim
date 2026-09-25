@@ -56,17 +56,19 @@ Each launcher invocation opens a new application instance and returns immediatel
 
 GUI-compatible Neovim options are forwarded in their original order, including split/tab counts, readonly/diff modes, `-u`, `-S`, `--cmd`, `-c`, `+command`, and `--listen`. Use `--` before filenames beginning with `-` or `+`. `--help` and `--version` print in the terminal. Headless, Ex/batch, standalone Lua, remote-client, and stdin-input modes conflict with the embedded GUI connection and produce an error; use Neovim directly for those. Detached startup errors are recorded in `launcher.log` in Zvim's configuration directory.
 
+Choose **Zvim → About Zvim** to see the running app’s version. The same version is printed by `zvim --version`.
+
 ## App settings
 
 Open **Zvim → Settings…** (`⌘,` on macOS; `Ctrl+Shift+,` elsewhere). General preferences and Keybindings have separate tabs. Compact switches are green when enabled and grey when disabled; changes save automatically.
 
 - **Appearance: System / Light / Dark** styles Zvim controls. System responds to desktop appearance changes; native titlebars continue to follow the OS.
 - **Sync editor appearance**, off by default, also sets Neovim's `background` option. Your colourscheme must support both appearances. NvChad/Base46 palettes are preserved unchanged because changing `background` resets their custom highlights; Zvim does not choose a replacement theme. Disabling sync restores the background from before sync was enabled unless you changed it yourself in Neovim. No configuration files are edited.
-- **Remember window size and position**, on by default, reuses the last saved editor-window placement. Turning it off opens new windows centred at the default size and stops saving geometry. This does not restore files, sessions, or multiple window layouts.
+- **Remember window size and position**, on by default, reuses the last saved editor-window placement. Moves and resizes are saved after a brief pause, as well as on normal close; fullscreen preserves the previous windowed placement. Turning it off opens new windows centred at the default size and stops saving geometry. This does not restore files, sessions, or multiple window layouts.
 - **Application icon** previews the bundled Neovim mark. The saved `app_icon` ID is `neovim`; this release has one choice. Unknown IDs fall back to it without losing other settings. Additional artwork and platform switching can be added later. The macOS bundle embeds the icon for Finder, the Dock and the app switcher.
 - **Open diagnostics folder** reveals the directory containing settings and startup/editor logs.
 
-Preferences live in `preferences.json`, separate from `window.json`. Changes apply to open windows in the same instance; independently launched instances reload preferences when activated. Font and plugin settings remain in Neovim.
+Preferences live in `preferences.json`, separate from `window.json`. On macOS, both are in `~/Library/Application Support/dev.zvim.Zvim/`, shared by `just run` and packaged app launches. Changes apply to open windows in the same instance; independently launched instances reload preferences when activated. Font and plugin settings remain in Neovim.
 
 ## Behaviour
 
@@ -85,7 +87,7 @@ Your existing plugins remain responsible for their own installations, external p
 
 ## Native terminal (experimental)
 
-The terminal has independent shell tabs, a compact tab strip with **+** and close buttons, and a one-pixel draggable divider. The first opening and each new tab start `$SHELL -l` in Neovim's current window-local directory. Hiding or switching tabs keeps every shell, scrollback and running program alive. Exited shells retain their output until you close the tab; create another with **+** or **Cmd+N**.
+The terminal supports nested right/down splits, each with its own shell tabs and compact tab strip. The dock divider and the dividers between terminal panes are draggable. The first opening and each new tab start `$SHELL -l` in Neovim's current window-local directory. Hiding or switching tabs keeps every shell, scrollback and running program alive. Exiting a shell closes its tab automatically; create another with **+** or **Cmd+N**.
 
 Defaults mirror the terminal actions in the maintainer's Zed keymap, with Zed's standard previous/next-tab shortcuts:
 
@@ -93,23 +95,26 @@ Defaults mirror the terminal actions in the maintainer's Zed keymap, with Zed's 
 | --- | --- | --- |
 | Focus terminal / return to editor | Cmd+Shift+, (Cmd+<) | Either pane |
 | Show / hide terminal | Cmd+Shift+. (Cmd+>) | Either pane |
-| Maximise / restore terminal | Cmd+Shift+Enter | Either pane |
-| New terminal tab | Cmd+N | Terminal focused |
+| Zoom focused terminal pane / restore layout | Cmd+Shift+Enter | Either pane |
+| New tab in focused terminal pane | Cmd+N | Terminal focused |
 | Close active terminal tab | Cmd+W | Terminal focused |
+| Split focused terminal right | Cmd+D | Terminal focused |
+| Split focused terminal down | Cmd+Shift+D | Terminal focused |
+| Focus terminal pane left / right | Cmd+[ / ] | Terminal focused |
 | Previous / next terminal tab | Cmd+Shift+[ / ] or Cmd+Alt+Left / Right | Terminal focused |
-| Select terminal tab 1–9 | Cmd+1–9 | Terminal focused |
+| Select tab 1–9 in focused pane | Cmd+1–9 | Terminal focused |
 | Hide terminal | Cmd+? | Terminal focused |
 | Close window | Cmd+Shift+W | Either pane |
 
-Option+, / Option+. also focus/toggle the terminal from Neovim normal/visual mode; Control-J moves focus down to the terminal in those modes. Returning focus to the editor keeps the terminal visible and restores the split if it was maximised. Plain Cmd+[ / ] remain pane-navigation keys in Zed, not tab-selection keys; terminal splitting is not implemented in Zvim.
+Option+, / Option+. also focus/toggle the terminal from Neovim normal/visual mode; Control-J moves focus down to the terminal in those modes. Returning focus to the editor keeps the terminal visible and restores the split if it was maximised. Cmd+[ / ] moves focus spatially between left/right terminal panes. Click a stacked pane or use Terminal → Focus Pane Above / Below to focus it. Tab switching and numbered selection affect only the focused pane.
 
 From Neovim, `:ZvimTerminal` still toggles visibility. Drag the divider to resize; the split starts at 40% and retains its proportion while that window stays open, including after hiding or maximising.
 
-Under **Settings → Keybindings**, record replacements for show/hide, focus, maximise, new tab, close tab and previous/next tab. Escape cancels recording; **Reset shortcuts** restores these defaults. Changes save automatically and apply immediately. Old default backtick shortcuts migrate to the new defaults; customised shortcuts are preserved. There is no runtime dependency on Zed or automatic rewriting of its keymap.
+Under **Settings → Keybindings**, record replacements for show/hide, focus, zoom, new/close/previous/next tab, split right/down and focus pane left/right. Escape cancels recording; **Reset shortcuts** restores these defaults. Changes save automatically and apply immediately. Old default backtick shortcuts migrate to the new defaults; customised shortcuts are preserved. There is no runtime dependency on Zed or automatic rewriting of its keymap.
 
-The pane uses Ghostty's native Metal renderer on macOS and OpenGL renderer on Linux/Wayland. It loads your Ghostty configuration for fonts and keybindings. Terminal colours follow Neovim live by default, including NvChad/Base46 themes; disable **Follow Neovim terminal colours** under Settings → General to opt out. Zvim's editor font remains controlled by Neovim. Ghostty application actions such as opening tabs/windows and settings are not implemented by this embedder. The terminal provides multiple shell tabs in one resizable bottom pane, with no terminal splits, search UI or session restoration. Built-in `:terminal` and existing terminal plugins retain Neovim's behaviour.
+The pane uses Ghostty's native Metal renderer on macOS and OpenGL renderer on Linux/Wayland. It loads your Ghostty configuration for fonts and keybindings. Terminal colours follow Neovim live by default, including NvChad/Base46 themes; disable **Follow Neovim terminal colours** under Settings → General to opt out. Zvim's editor font remains controlled by Neovim. Ghostty application actions such as opening tabs/windows and settings are not implemented by this embedder. The terminal provides multiple panes and shell tabs in one resizable bottom dock, with no search UI or session restoration. Built-in `:terminal` and existing terminal plugins retain Neovim's behaviour.
 
-Copy/paste use Ghostty bindings (normally Command-C/V on macOS, Ctrl-Shift-C/V on Linux). Terminal → Close Terminal Tab asks before ending a running command. Closing the last tab hides the pane. Window close and Quit check all terminal tabs, including hidden ones, before closing Neovim; Cancel preserves the editor and shell. Idle prompts detected by Ghostty close quietly. If Neovim is quit directly, **Keep Terminal** expands the remaining session to fill the window.
+Copy/paste use Ghostty bindings (normally Command-C/V on macOS, Ctrl-Shift-C/V on Linux). Terminal → Close Terminal Tab asks before ending a running command. Exiting a shell automatically closes its tab. Closing the last tab in a split removes that split and expands its neighbour; closing the final terminal hides the dock. Window close and Quit check all terminal tabs across every split, including hidden ones, before closing Neovim; Cancel preserves the editor and shell. Idle prompts detected by Ghostty close quietly. If Neovim is quit directly, **Keep Terminal** expands the remaining session to fill the window.
 
 The native dependency and its patched Ghostty source are pinned in Cargo. The initial build compiles Ghostty using Zig and downloads its dependencies; no standalone Ghostty installation is required. The integration is a trial, not a claim of complete standalone Ghostty parity. See `docs/TERMINAL.md` for limitations and verification.
 
@@ -158,3 +163,5 @@ SemVer tags containing a prerelease suffix publish as GitHub prereleases. The re
 is staged as a draft until all assets upload; failed jobs can be rerun.
 The macOS bundle version is derived from Cargo's version. Public signing and
 notarisation are not configured.
+
+For an optimised development launch, use `just run-release`. See [performance measurements and reproduction](docs/PERFORMANCE.md) for the rendering/cache benchmarks.

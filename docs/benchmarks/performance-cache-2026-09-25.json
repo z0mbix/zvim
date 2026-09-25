@@ -1,0 +1,99 @@
+{
+  "runs": [
+    {
+      "text_before": {
+        "milliseconds": 80.19775,
+        "allocation_calls": 1250000
+      },
+      "text_after": {
+        "milliseconds": 5.902208,
+        "allocation_calls": 0
+      },
+      "theme_before": {
+        "milliseconds": 89.70845800000001,
+        "allocation_calls": 560000
+      },
+      "theme_after": {
+        "milliseconds": 0.261917,
+        "allocation_calls": 0
+      }
+    },
+    {
+      "text_before": {
+        "milliseconds": 74.462208,
+        "allocation_calls": 1250000
+      },
+      "text_after": {
+        "milliseconds": 6.187542,
+        "allocation_calls": 0
+      },
+      "theme_before": {
+        "milliseconds": 89.54425,
+        "allocation_calls": 560000
+      },
+      "theme_after": {
+        "milliseconds": 0.268417,
+        "allocation_calls": 0
+      }
+    },
+    {
+      "text_before": {
+        "milliseconds": 75.596542,
+        "allocation_calls": 1250000
+      },
+      "text_after": {
+        "milliseconds": 6.303625,
+        "allocation_calls": 0
+      },
+      "theme_before": {
+        "milliseconds": 89.73545800000001,
+        "allocation_calls": 560000
+      },
+      "theme_after": {
+        "milliseconds": 0.267083,
+        "allocation_calls": 0
+      }
+    },
+    {
+      "text_before": {
+        "milliseconds": 75.27695800000001,
+        "allocation_calls": 1250000
+      },
+      "text_after": {
+        "milliseconds": 6.304665999999999,
+        "allocation_calls": 0
+      },
+      "theme_before": {
+        "milliseconds": 90.649041,
+        "allocation_calls": 560000
+      },
+      "theme_after": {
+        "milliseconds": 0.268209,
+        "allocation_calls": 0
+      }
+    },
+    {
+      "text_before": {
+        "milliseconds": 75.716792,
+        "allocation_calls": 1250000
+      },
+      "text_after": {
+        "milliseconds": 5.997875,
+        "allocation_calls": 0
+      },
+      "theme_before": {
+        "milliseconds": 91.10725000000001,
+        "allocation_calls": 560000
+      },
+      "theme_after": {
+        "milliseconds": 0.26879200000000003,
+        "allocation_calls": 0
+      }
+    }
+  ],
+  "pressure_misses": {
+    "before": 12512,
+    "after": 12256
+  },
+  "notes": "250000 warmed text lookups; 10000 unchanged frames with 8 terminals. Values stand in for shaped glyphs; this does not time shaping or GPU work. Allocation counting is enabled in both paths."
+}

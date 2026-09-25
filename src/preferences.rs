@@ -42,7 +42,11 @@ fn terminal_bindings(preferences: &Preferences) -> Vec<KeyBinding> {
             TerminalShortcut::New
             | TerminalShortcut::Close
             | TerminalShortcut::Previous
-            | TerminalShortcut::Next => "Terminal",
+            | TerminalShortcut::Next
+            | TerminalShortcut::SplitRight
+            | TerminalShortcut::SplitDown
+            | TerminalShortcut::PaneLeft
+            | TerminalShortcut::PaneRight => "Terminal",
             _ => "ZvimWindow",
         };
         for key in shortcut_aliases(shortcut.key(p)) {
@@ -58,6 +62,18 @@ fn terminal_bindings(preferences: &Preferences) -> Vec<KeyBinding> {
                     KeyBinding::new(&key, PreviousTerminal, Some(context))
                 }
                 TerminalShortcut::Next => KeyBinding::new(&key, NextTerminal, Some(context)),
+                TerminalShortcut::SplitRight => {
+                    KeyBinding::new(&key, SplitTerminalRight, Some(context))
+                }
+                TerminalShortcut::SplitDown => {
+                    KeyBinding::new(&key, SplitTerminalDown, Some(context))
+                }
+                TerminalShortcut::PaneLeft => {
+                    KeyBinding::new(&key, TerminalPaneLeft, Some(context))
+                }
+                TerminalShortcut::PaneRight => {
+                    KeyBinding::new(&key, TerminalPaneRight, Some(context))
+                }
             });
         }
     }
@@ -654,7 +670,7 @@ impl Render for PreferencesView {
                         .child(format!("{}: {}", shortcut.label(), shortcut.key(&p)))
                         .child(self.button(10+APP_ICONS.len()+i, if self.recording_shortcut == Some(shortcut) {"Press shortcut…"} else {"Change"}, false, Choice::RecordShortcut(shortcut), d, cx))))
                 .child(div().flex().child(self.button(10+APP_ICONS.len()+TerminalShortcut::ALL.len(), "Reset shortcuts", false, Choice::ResetShortcuts, d, cx)))
-                .child(div().text_color(muted).child("Defaults match your Zed terminal keys. Click Change, then press a shortcut; Escape cancels. New, close and tab-switch shortcuts apply while the terminal is focused. Cmd+1–9 selects a terminal tab.")))
+                .child(div().text_color(muted).child("Defaults match your Zed terminal keys. Click Change, then press a shortcut; Escape cancels. Tab, split and pane-navigation shortcuts apply while the terminal is focused. Cmd+1–9 selects a tab in the focused pane.")))
                 )))
             .child(div().text_sm().flex_shrink_0().text_color(muted).child("Changes save automatically. Fonts, plugins and editing preferences stay in your Neovim configuration."))
             .when_some(self.error.clone(), |d,e| d.child(div().text_color(rgb(0xd75b65)).child(e)))
@@ -727,11 +743,19 @@ mod shortcut_tests {
         assert_action(&map, "cmd-{", "Terminal", &PreviousTerminal);
         assert_action(&map, "cmd-}", "Terminal", &NextTerminal);
         assert_action(&map, "cmd-9", "Terminal", &ActivateTerminal(8));
+        assert_action(&map, "cmd-d", "Terminal", &SplitTerminalRight);
+        assert_action(&map, "cmd-shift-d", "Terminal", &SplitTerminalDown);
+        assert_action(&map, "cmd-[", "Terminal", &TerminalPaneLeft);
+        assert_action(&map, "cmd-]", "Terminal", &TerminalPaneRight);
         assert_action(&map, "ctrl-j", "Zvim Normal", &FocusTerminal);
         for (key, context) in [
             ("ctrl-j", "Terminal"),
             ("ctrl-j", "Zvim"),
             ("cmd-1", "Zvim"),
+            ("cmd-d", "Zvim"),
+            ("cmd-shift-d", "Zvim"),
+            ("cmd-[", "Zvim"),
+            ("cmd-]", "Zvim"),
             ("ctrl-`", "Terminal"),
         ] {
             let contexts = [

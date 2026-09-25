@@ -62,9 +62,54 @@ impl TerminalTheme {
     }
 }
 
+/// Avoid formatting Ghostty configuration on unchanged Neovim frames.
+#[derive(Default)]
+pub struct ThemeConfigCache {
+    input: Option<(Option<TerminalTheme>, u32, u32)>,
+    pub config: Option<std::sync::Arc<str>>,
+}
+impl ThemeConfigCache {
+    pub fn update(
+        &mut self,
+        theme: Option<&TerminalTheme>,
+        foreground: u32,
+        background: u32,
+    ) -> bool {
+        let input = (theme.cloned(), foreground, background);
+        if self.input.as_ref() == Some(&input) {
+            return false;
+        }
+        self.input = Some(input);
+        let config =
+            theme.map(|theme| std::sync::Arc::<str>::from(theme.config(foreground, background)));
+        if self.config == config {
+            return false;
+        }
+        self.config = config;
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cached_theme_tracks_changes_and_restores_user_configuration() {
+        let mut cache = ThemeConfigCache::default();
+        let theme = TerminalTheme([None; 22]);
+        assert!(cache.update(Some(&theme), 1, 2));
+        let previous = cache.config.clone().unwrap();
+        assert!(!cache.update(Some(&theme), 1, 2));
+        assert!(std::sync::Arc::ptr_eq(
+            &previous,
+            cache.config.as_ref().unwrap()
+        ));
+        assert!(cache.update(Some(&theme), 1, 3));
+        assert!(cache.update(None, 1, 3));
+        assert!(cache.config.is_none());
+        assert!(!cache.update(None, 4, 5));
+        assert!(cache.update(Some(&theme), 4, 5));
+    }
     #[test]
     fn missing_colours_use_editor_defaults_and_leave_ansi_palette_alone() {
         let config = TerminalTheme([None; 22]).config(0xeeeeee, 0x111111);

@@ -1,0 +1,797 @@
+{
+  "method": "Three alternating before/after release runs, same GUI workload, no concurrent builds. CPU stage timings include tracing overhead; not input-to-display latency.",
+  "pairs": [
+    {
+      "before": {
+        "binary": "target/release/examples/performance_ui_before",
+        "sha256": "9e2cd1bf775e66ab6bb33561b2fa433da7b6de0303686843bdd2adb3c3c649ce",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "runs": [
+          {
+            "editor": {
+              "terminal_ui": {
+                "n": 181,
+                "median_ms": 0.024,
+                "p95_ms": 0.037,
+                "max_ms": 0.19
+              },
+              "editor_render": {
+                "n": 181,
+                "median_ms": 0.128,
+                "p95_ms": 0.189,
+                "max_ms": 3.903
+              },
+              "grid_paint": {
+                "n": 181,
+                "median_ms": 2.829,
+                "p95_ms": 4.146,
+                "max_ms": 5.117
+              },
+              "redraw_decode": {
+                "n": 183,
+                "median_ms": 0.478,
+                "p95_ms": 1.502,
+                "max_ms": 2.187
+              },
+              "theme_sync": {
+                "n": 174,
+                "median_ms": 0.01,
+                "p95_ms": 0.029,
+                "max_ms": 0.051
+              }
+            },
+            "hidden_tabs": {
+              "terminal_ui": {
+                "n": 181,
+                "median_ms": 0.061,
+                "p95_ms": 0.079,
+                "max_ms": 0.109
+              },
+              "editor_render": {
+                "n": 181,
+                "median_ms": 0.166,
+                "p95_ms": 0.221,
+                "max_ms": 0.264
+              },
+              "grid_paint": {
+                "n": 181,
+                "median_ms": 2.779,
+                "p95_ms": 4.097,
+                "max_ms": 4.672
+              },
+              "redraw_decode": {
+                "n": 183,
+                "median_ms": 0.728,
+                "p95_ms": 1.444,
+                "max_ms": 1.963
+              },
+              "theme_sync": {
+                "n": 175,
+                "median_ms": 0.017,
+                "p95_ms": 0.039,
+                "max_ms": 0.056
+              }
+            },
+            "splits": {
+              "terminal_ui": {
+                "n": 180,
+                "median_ms": 0.077,
+                "p95_ms": 0.099,
+                "max_ms": 0.202
+              },
+              "editor_render": {
+                "n": 180,
+                "median_ms": 0.1995,
+                "p95_ms": 0.26,
+                "max_ms": 0.771
+              },
+              "grid_paint": {
+                "n": 180,
+                "median_ms": 2.322,
+                "p95_ms": 3.276,
+                "max_ms": 6.249
+              },
+              "redraw_decode": {
+                "n": 177,
+                "median_ms": 0.743,
+                "p95_ms": 1.2,
+                "max_ms": 2.095
+              },
+              "theme_sync": {
+                "n": 173,
+                "median_ms": 0.038,
+                "p95_ms": 0.051,
+                "max_ms": 0.077
+              }
+            },
+            "resize": {
+              "theme_sync": {
+                "n": 193,
+                "median_ms": 0.018,
+                "p95_ms": 0.021,
+                "max_ms": 0.043
+              },
+              "terminal_ui": {
+                "n": 182,
+                "median_ms": 0.035,
+                "p95_ms": 0.04,
+                "max_ms": 0.08
+              },
+              "editor_render": {
+                "n": 182,
+                "median_ms": 0.09,
+                "p95_ms": 0.148,
+                "max_ms": 2.695
+              },
+              "grid_paint": {
+                "n": 182,
+                "median_ms": 1.001,
+                "p95_ms": 1.237,
+                "max_ms": 1.519
+              },
+              "redraw_decode": {
+                "n": 616,
+                "median_ms": 0.1905,
+                "p95_ms": 0.805,
+                "max_ms": 3.361
+              }
+            }
+          }
+        ]
+      },
+      "after": {
+        "binary": "target/release/examples/performance_ui",
+        "sha256": "4d5f120fd2929514556b9a06f5b7a0c2a344be732fb6cbec2efb456b1cfafca8",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "runs": [
+          {
+            "editor": {
+              "editor_render": {
+                "n": 181,
+                "median_ms": 0.097,
+                "p95_ms": 0.137,
+                "max_ms": 1.83
+              },
+              "grid_paint": {
+                "n": 181,
+                "median_ms": 1.649,
+                "p95_ms": 2.386,
+                "max_ms": 3.068
+              },
+              "redraw_decode": {
+                "n": 182,
+                "median_ms": 1.1395,
+                "p95_ms": 1.602,
+                "max_ms": 5.389
+              },
+              "theme_sync": {
+                "n": 174,
+                "median_ms": 0.026,
+                "p95_ms": 0.041,
+                "max_ms": 3.849
+              }
+            },
+            "hidden_tabs": {
+              "editor_render": {
+                "n": 180,
+                "median_ms": 0.098,
+                "p95_ms": 0.131,
+                "max_ms": 0.183
+              },
+              "grid_paint": {
+                "n": 180,
+                "median_ms": 1.641,
+                "p95_ms": 2.341,
+                "max_ms": 2.983
+              },
+              "redraw_decode": {
+                "n": 181,
+                "median_ms": 1.119,
+                "p95_ms": 1.498,
+                "max_ms": 2.234
+              },
+              "theme_sync": {
+                "n": 173,
+                "median_ms": 0.025,
+                "p95_ms": 0.034,
+                "max_ms": 0.05
+              }
+            },
+            "splits": {
+              "terminal_ui": {
+                "n": 180,
+                "median_ms": 0.088,
+                "p95_ms": 0.135,
+                "max_ms": 0.222
+              },
+              "editor_render": {
+                "n": 180,
+                "median_ms": 0.224,
+                "p95_ms": 0.336,
+                "max_ms": 0.635
+              },
+              "grid_paint": {
+                "n": 180,
+                "median_ms": 1.1320000000000001,
+                "p95_ms": 1.633,
+                "max_ms": 2.043
+              },
+              "redraw_decode": {
+                "n": 177,
+                "median_ms": 0.764,
+                "p95_ms": 1.137,
+                "max_ms": 2.975
+              },
+              "theme_sync": {
+                "n": 173,
+                "median_ms": 0.028,
+                "p95_ms": 0.041,
+                "max_ms": 0.178
+              }
+            },
+            "resize": {
+              "terminal_ui": {
+                "n": 182,
+                "median_ms": 0.037,
+                "p95_ms": 0.071,
+                "max_ms": 0.107
+              },
+              "editor_render": {
+                "n": 182,
+                "median_ms": 0.0935,
+                "p95_ms": 0.181,
+                "max_ms": 0.201
+              },
+              "grid_paint": {
+                "n": 182,
+                "median_ms": 0.4345,
+                "p95_ms": 0.586,
+                "max_ms": 0.985
+              },
+              "redraw_decode": {
+                "n": 624,
+                "median_ms": 0.148,
+                "p95_ms": 0.74,
+                "max_ms": 1.013
+              },
+              "theme_sync": {
+                "n": 198,
+                "median_ms": 0.01,
+                "p95_ms": 0.015,
+                "max_ms": 0.302
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "before": {
+        "binary": "target/release/examples/performance_ui_before",
+        "sha256": "9e2cd1bf775e66ab6bb33561b2fa433da7b6de0303686843bdd2adb3c3c649ce",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "runs": [
+          {
+            "editor": {
+              "terminal_ui": {
+                "n": 180,
+                "median_ms": 0.025,
+                "p95_ms": 0.04,
+                "max_ms": 0.254
+              },
+              "editor_render": {
+                "n": 180,
+                "median_ms": 0.13,
+                "p95_ms": 0.185,
+                "max_ms": 0.542
+              },
+              "redraw_decode": {
+                "n": 183,
+                "median_ms": 0.947,
+                "p95_ms": 1.549,
+                "max_ms": 2.636
+              },
+              "grid_paint": {
+                "n": 180,
+                "median_ms": 2.9245,
+                "p95_ms": 4.396,
+                "max_ms": 5.026
+              },
+              "theme_sync": {
+                "n": 175,
+                "median_ms": 0.01,
+                "p95_ms": 0.031,
+                "max_ms": 0.047
+              }
+            },
+            "hidden_tabs": {
+              "redraw_decode": {
+                "n": 183,
+                "median_ms": 0.46,
+                "p95_ms": 1.498,
+                "max_ms": 2.947
+              },
+              "theme_sync": {
+                "n": 175,
+                "median_ms": 0.015,
+                "p95_ms": 0.039,
+                "max_ms": 0.053
+              },
+              "terminal_ui": {
+                "n": 180,
+                "median_ms": 0.062,
+                "p95_ms": 0.072,
+                "max_ms": 0.197
+              },
+              "editor_render": {
+                "n": 180,
+                "median_ms": 0.169,
+                "p95_ms": 0.204,
+                "max_ms": 3.304
+              },
+              "grid_paint": {
+                "n": 180,
+                "median_ms": 2.844,
+                "p95_ms": 4.293,
+                "max_ms": 4.804
+              }
+            },
+            "splits": {
+              "redraw_decode": {
+                "n": 178,
+                "median_ms": 0.7655000000000001,
+                "p95_ms": 1.259,
+                "max_ms": 2.88
+              },
+              "theme_sync": {
+                "n": 174,
+                "median_ms": 0.036,
+                "p95_ms": 0.049,
+                "max_ms": 0.09
+              },
+              "terminal_ui": {
+                "n": 180,
+                "median_ms": 0.081,
+                "p95_ms": 0.106,
+                "max_ms": 0.227
+              },
+              "editor_render": {
+                "n": 180,
+                "median_ms": 0.2005,
+                "p95_ms": 0.264,
+                "max_ms": 2.841
+              },
+              "grid_paint": {
+                "n": 180,
+                "median_ms": 2.4450000000000003,
+                "p95_ms": 3.324,
+                "max_ms": 3.944
+              }
+            },
+            "resize": {
+              "terminal_ui": {
+                "n": 185,
+                "median_ms": 0.038,
+                "p95_ms": 0.068,
+                "max_ms": 0.149
+              },
+              "editor_render": {
+                "n": 185,
+                "median_ms": 0.099,
+                "p95_ms": 0.202,
+                "max_ms": 0.484
+              },
+              "grid_paint": {
+                "n": 185,
+                "median_ms": 0.996,
+                "p95_ms": 1.264,
+                "max_ms": 2.179
+              },
+              "redraw_decode": {
+                "n": 638,
+                "median_ms": 0.211,
+                "p95_ms": 0.831,
+                "max_ms": 13.056
+              },
+              "theme_sync": {
+                "n": 208,
+                "median_ms": 0.019,
+                "p95_ms": 0.026,
+                "max_ms": 0.058
+              }
+            }
+          }
+        ]
+      },
+      "after": {
+        "binary": "target/release/examples/performance_ui",
+        "sha256": "4d5f120fd2929514556b9a06f5b7a0c2a344be732fb6cbec2efb456b1cfafca8",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "runs": [
+          {
+            "editor": {
+              "editor_render": {
+                "n": 181,
+                "median_ms": 0.098,
+                "p95_ms": 0.138,
+                "max_ms": 0.19
+              },
+              "grid_paint": {
+                "n": 181,
+                "median_ms": 1.584,
+                "p95_ms": 2.159,
+                "max_ms": 5.435
+              },
+              "redraw_decode": {
+                "n": 182,
+                "median_ms": 1.175,
+                "p95_ms": 1.688,
+                "max_ms": 5.374
+              },
+              "theme_sync": {
+                "n": 174,
+                "median_ms": 0.026,
+                "p95_ms": 0.038,
+                "max_ms": 0.058
+              }
+            },
+            "hidden_tabs": {
+              "editor_render": {
+                "n": 181,
+                "median_ms": 0.1,
+                "p95_ms": 0.137,
+                "max_ms": 0.287
+              },
+              "grid_paint": {
+                "n": 181,
+                "median_ms": 1.713,
+                "p95_ms": 2.295,
+                "max_ms": 2.654
+              },
+              "redraw_decode": {
+                "n": 182,
+                "median_ms": 1.23,
+                "p95_ms": 1.606,
+                "max_ms": 3.331
+              },
+              "theme_sync": {
+                "n": 173,
+                "median_ms": 0.026,
+                "p95_ms": 0.034,
+                "max_ms": 0.209
+              }
+            },
+            "splits": {
+              "redraw_decode": {
+                "n": 177,
+                "median_ms": 0.823,
+                "p95_ms": 1.232,
+                "max_ms": 2.071
+              },
+              "theme_sync": {
+                "n": 173,
+                "median_ms": 0.026,
+                "p95_ms": 0.038,
+                "max_ms": 0.165
+              },
+              "terminal_ui": {
+                "n": 180,
+                "median_ms": 0.0865,
+                "p95_ms": 0.134,
+                "max_ms": 0.215
+              },
+              "editor_render": {
+                "n": 180,
+                "median_ms": 0.216,
+                "p95_ms": 0.303,
+                "max_ms": 0.409
+              },
+              "grid_paint": {
+                "n": 180,
+                "median_ms": 1.183,
+                "p95_ms": 1.703,
+                "max_ms": 2.127
+              }
+            },
+            "resize": {
+              "terminal_ui": {
+                "n": 181,
+                "median_ms": 0.038,
+                "p95_ms": 0.047,
+                "max_ms": 0.098
+              },
+              "editor_render": {
+                "n": 181,
+                "median_ms": 0.097,
+                "p95_ms": 0.125,
+                "max_ms": 3.189
+              },
+              "grid_paint": {
+                "n": 181,
+                "median_ms": 0.441,
+                "p95_ms": 0.535,
+                "max_ms": 1.047
+              },
+              "redraw_decode": {
+                "n": 608,
+                "median_ms": 0.174,
+                "p95_ms": 0.78,
+                "max_ms": 2.013
+              },
+              "theme_sync": {
+                "n": 195,
+                "median_ms": 0.012,
+                "p95_ms": 0.016,
+                "max_ms": 0.038
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "before": {
+        "binary": "target/release/examples/performance_ui_before",
+        "sha256": "9e2cd1bf775e66ab6bb33561b2fa433da7b6de0303686843bdd2adb3c3c649ce",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "runs": [
+          {
+            "editor": {
+              "redraw_decode": {
+                "n": 183,
+                "median_ms": 0.953,
+                "p95_ms": 1.283,
+                "max_ms": 1.455
+              },
+              "theme_sync": {
+                "n": 175,
+                "median_ms": 0.009,
+                "p95_ms": 0.028,
+                "max_ms": 0.148
+              },
+              "terminal_ui": {
+                "n": 180,
+                "median_ms": 0.024,
+                "p95_ms": 0.029,
+                "max_ms": 0.076
+              },
+              "editor_render": {
+                "n": 180,
+                "median_ms": 0.133,
+                "p95_ms": 0.167,
+                "max_ms": 0.23
+              },
+              "grid_paint": {
+                "n": 180,
+                "median_ms": 2.8895,
+                "p95_ms": 4.373,
+                "max_ms": 4.704
+              }
+            },
+            "hidden_tabs": {
+              "terminal_ui": {
+                "n": 180,
+                "median_ms": 0.065,
+                "p95_ms": 0.083,
+                "max_ms": 0.138
+              },
+              "editor_render": {
+                "n": 180,
+                "median_ms": 0.178,
+                "p95_ms": 0.257,
+                "max_ms": 0.405
+              },
+              "redraw_decode": {
+                "n": 183,
+                "median_ms": 0.505,
+                "p95_ms": 1.35,
+                "max_ms": 2.749
+              },
+              "grid_paint": {
+                "n": 180,
+                "median_ms": 2.752,
+                "p95_ms": 4.092,
+                "max_ms": 4.521
+              },
+              "theme_sync": {
+                "n": 175,
+                "median_ms": 0.017,
+                "p95_ms": 0.043,
+                "max_ms": 0.132
+              }
+            },
+            "splits": {
+              "terminal_ui": {
+                "n": 180,
+                "median_ms": 0.077,
+                "p95_ms": 0.097,
+                "max_ms": 0.146
+              },
+              "editor_render": {
+                "n": 180,
+                "median_ms": 0.192,
+                "p95_ms": 0.258,
+                "max_ms": 2.323
+              },
+              "grid_paint": {
+                "n": 180,
+                "median_ms": 2.1245000000000003,
+                "p95_ms": 3.025,
+                "max_ms": 3.707
+              },
+              "redraw_decode": {
+                "n": 177,
+                "median_ms": 0.682,
+                "p95_ms": 0.968,
+                "max_ms": 2.402
+              },
+              "theme_sync": {
+                "n": 173,
+                "median_ms": 0.034,
+                "p95_ms": 0.046,
+                "max_ms": 0.059
+              }
+            },
+            "resize": {
+              "terminal_ui": {
+                "n": 181,
+                "median_ms": 0.035,
+                "p95_ms": 0.04,
+                "max_ms": 0.087
+              },
+              "editor_render": {
+                "n": 181,
+                "median_ms": 0.091,
+                "p95_ms": 0.126,
+                "max_ms": 0.253
+              },
+              "grid_paint": {
+                "n": 181,
+                "median_ms": 0.986,
+                "p95_ms": 1.251,
+                "max_ms": 1.712
+              },
+              "redraw_decode": {
+                "n": 625,
+                "median_ms": 0.146,
+                "p95_ms": 0.808,
+                "max_ms": 1.018
+              },
+              "theme_sync": {
+                "n": 194,
+                "median_ms": 0.017,
+                "p95_ms": 0.022,
+                "max_ms": 0.054
+              }
+            }
+          }
+        ]
+      },
+      "after": {
+        "binary": "target/release/examples/performance_ui",
+        "sha256": "4d5f120fd2929514556b9a06f5b7a0c2a344be732fb6cbec2efb456b1cfafca8",
+        "platform": "macOS-26.5.1-arm64-arm-64bit",
+        "runs": [
+          {
+            "editor": {
+              "editor_render": {
+                "n": 180,
+                "median_ms": 0.1055,
+                "p95_ms": 0.146,
+                "max_ms": 0.219
+              },
+              "grid_paint": {
+                "n": 180,
+                "median_ms": 1.7545000000000002,
+                "p95_ms": 2.363,
+                "max_ms": 3.323
+              },
+              "redraw_decode": {
+                "n": 182,
+                "median_ms": 1.229,
+                "p95_ms": 1.675,
+                "max_ms": 4.379
+              },
+              "theme_sync": {
+                "n": 174,
+                "median_ms": 0.027,
+                "p95_ms": 0.041,
+                "max_ms": 0.137
+              }
+            },
+            "hidden_tabs": {
+              "editor_render": {
+                "n": 180,
+                "median_ms": 0.0985,
+                "p95_ms": 0.144,
+                "max_ms": 0.311
+              },
+              "grid_paint": {
+                "n": 180,
+                "median_ms": 1.67,
+                "p95_ms": 2.423,
+                "max_ms": 2.837
+              },
+              "redraw_decode": {
+                "n": 182,
+                "median_ms": 1.2,
+                "p95_ms": 1.622,
+                "max_ms": 2.081
+              },
+              "theme_sync": {
+                "n": 174,
+                "median_ms": 0.025,
+                "p95_ms": 0.033,
+                "max_ms": 0.145
+              }
+            },
+            "splits": {
+              "redraw_decode": {
+                "n": 177,
+                "median_ms": 0.813,
+                "p95_ms": 1.209,
+                "max_ms": 3.36
+              },
+              "theme_sync": {
+                "n": 173,
+                "median_ms": 0.025,
+                "p95_ms": 0.032,
+                "max_ms": 0.095
+              },
+              "terminal_ui": {
+                "n": 181,
+                "median_ms": 0.086,
+                "p95_ms": 0.116,
+                "max_ms": 0.466
+              },
+              "editor_render": {
+                "n": 181,
+                "median_ms": 0.215,
+                "p95_ms": 0.292,
+                "max_ms": 3.861
+              },
+              "grid_paint": {
+                "n": 181,
+                "median_ms": 1.126,
+                "p95_ms": 1.65,
+                "max_ms": 2.475
+              }
+            },
+            "resize": {
+              "redraw_decode": {
+                "n": 610,
+                "median_ms": 0.158,
+                "p95_ms": 0.841,
+                "max_ms": 1.598
+              },
+              "terminal_ui": {
+                "n": 180,
+                "median_ms": 0.036,
+                "p95_ms": 0.075,
+                "max_ms": 0.09
+              },
+              "editor_render": {
+                "n": 180,
+                "median_ms": 0.0935,
+                "p95_ms": 0.19,
+                "max_ms": 0.255
+              },
+              "grid_paint": {
+                "n": 180,
+                "median_ms": 0.4475,
+                "p95_ms": 0.737,
+                "max_ms": 0.998
+              },
+              "theme_sync": {
+                "n": 187,
+                "median_ms": 0.01,
+                "p95_ms": 0.013,
+                "max_ms": 0.024
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

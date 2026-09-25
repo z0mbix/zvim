@@ -12,15 +12,22 @@ use gpui_libghostty::TerminalOptions;
 /// A GPUI entity backed by Ghostty's native Metal or Wayland/OpenGL surface.
 pub struct Terminal {
     surface: NativeSurface,
-    applied_theme: Option<String>,
+    applied_theme: Option<std::sync::Arc<str>>,
     modal_snapshot: Option<std::sync::Arc<gpui::RenderImage>>,
     focus: FocusHandle,
     bounds: Bounds<Pixels>,
     tick_task: Option<Task<()>>,
     visible: bool,
+    exit_reported: bool,
     window_focused: bool,
     _subscriptions: Vec<Subscription>,
 }
+
+pub struct TerminalExited;
+impl gpui::EventEmitter<TerminalExited> for Terminal {}
+
+pub struct TerminalFocused;
+impl gpui::EventEmitter<TerminalFocused> for Terminal {}
 
 impl Terminal {
     /// Spawns the configured command and attaches its native surface to `window`.
@@ -45,8 +52,9 @@ impl Terminal {
         }
         Ok(cx.new(|cx| {
             let subscriptions = vec![
-                cx.on_focus(&focus, window, |terminal: &mut Self, window, _| {
-                    terminal.sync_focus(window)
+                cx.on_focus(&focus, window, |terminal: &mut Self, window, cx| {
+                    terminal.sync_focus(window);
+                    cx.emit(TerminalFocused);
                 }),
                 cx.on_blur(&focus, window, |terminal: &mut Self, window, _| {
                     terminal.sync_focus(window)
@@ -63,6 +71,7 @@ impl Terminal {
                 bounds: Bounds::default(),
                 tick_task: None,
                 visible: true,
+                exit_reported: false,
                 window_focused: false,
                 _subscriptions: subscriptions,
             };
@@ -71,7 +80,7 @@ impl Terminal {
         }))
     }
 
-    pub fn set_theme(&mut self, config: Option<String>) -> Result<(), String> {
+    pub fn set_theme(&mut self, config: Option<std::sync::Arc<str>>) -> Result<(), String> {
         if self.applied_theme != config {
             self.surface.set_color_config(config.as_deref())?;
             self.applied_theme = config;
@@ -139,8 +148,7 @@ impl Terminal {
         if self.tick_task.is_some() {
             return;
         }
-        self.surface.tick();
-        self.service_clipboard(cx);
+        self.tick(cx);
         let wakeup = self.surface.wakeup();
         let terminal = cx.entity().downgrade();
         self.tick_task = Some(cx.spawn(async move |_, cx| {
@@ -149,14 +157,22 @@ impl Terminal {
                 let updated = terminal.update(cx, |terminal, cx| {
                     // Ghostty draws its native child during the tick; GPUI has no
                     // terminal pixels to repaint for this wakeup.
-                    terminal.surface.tick();
-                    terminal.service_clipboard(cx);
+                    terminal.tick(cx);
                 });
                 if updated.is_err() {
                     break;
                 }
             }
         }));
+    }
+
+    fn tick(&mut self, cx: &mut Context<Self>) {
+        self.surface.tick();
+        self.service_clipboard(cx);
+        if !self.exit_reported && !self.is_alive() {
+            self.exit_reported = true;
+            cx.emit(TerminalExited);
+        }
     }
 
     fn service_clipboard(&mut self, cx: &mut Context<Self>) {

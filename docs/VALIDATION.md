@@ -111,3 +111,16 @@ Manual follow-up: drag in both directions and beyond the window bounds; hide/sho
 ## v0.0.4 release preparation
 
 The user reports that terminal tabs and the revised Settings UI work well in their local app. The Settings page has General and Keybindings tabs, compact buttons and green/grey switches. Existing automated coverage includes 36 Rust/Neovim tests and the native macOS two-shell smoke test described above.
+
+## Terminal splits
+
+- All 39 Rust/Neovim tests and strict Clippy pass. Split tests cover independent tabs, nested geometry, directional focus, divider ratios, tiny windows, zoom visibility and sibling selection after closing a pane.
+- Keymap tests verify Cmd+D / Cmd+Shift+D split right/down and Cmd+[ / ] navigate panes only in terminal context, while shifted brackets still switch tabs.
+- The native macOS smoke test passes with simultaneous side-by-side and stacked surfaces, independent colours/output, zoom/restore and closing one shell while another remains alive.
+- Full app split dragging and focus interaction still require manual confirmation. Linux/Wayland split rendering remains unverified.
+
+Shell exit cleanup (2026-09-25): `cargo test --locked --all-targets` passed all 40 tests; strict Clippy, formatting and diff checks passed. The macOS native test verifies that visible and hidden interactive shells report exit and wake the adapter without another keypress. Layout regression coverage verifies that background removal preserves the selected pane and nested survivors expand to fill the freed area. Full-app exit/focus interaction remains a manual check.
+
+Window geometry persistence (2026-09-25): saves moves/resizes after 300 ms of inactivity, uses content dimensions on macOS to match GPUI window creation, and preserves the last windowed placement during fullscreen. All 40 tests and strict Clippy passed. Interactive move/resize/relaunch verification remains manual.
+
+Performance pass (2026-09-25): all 46 core Rust/Neovim tests, strict all-target Clippy, debug application build, formatting and diff checks passed. The native macOS theme/split/exit integration test passed. Three alternating before/after release GUI pairs measured 40–56% less editor CPU paint time across the four workloads; this is not an input-to-display latency claim. See `docs/PERFORMANCE.md` and its linked JSON reports for methodology, mixed results in smaller stages, cache allocation counts and reproduction.

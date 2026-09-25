@@ -3,7 +3,8 @@
 #include <assert.h>
 #include <stdio.h>
 
-static void wake(void *data) { (void)data; }
+static atomic_uint wake_count;
+static void wake(void *data) { (void)data; atomic_fetch_add(&wake_count, 1); }
 static bool approve(void *data, int op, const char *text) {
     (void)data; (void)op; (void)text; return false;
 }
@@ -84,6 +85,29 @@ int main(int argc, char **argv) {
         contains(second, "SECOND_TAB");
         assert(zvim_ghostty_surface_is_alive(state));
         assert(zvim_ghostty_surface_needs_confirm_quit(state));
+        // Two live split surfaces must render independently and survive zoom/restore.
+        zvim_ghostty_surface_set_frame(state, 0, 24, 319, 376);
+        zvim_ghostty_surface_set_frame(second, 320, 24, 320, 376);
+        zvim_ghostty_surface_set_visible(state, true);
+        assert(![state->view isHidden] && ![second->view isHidden]);
+        assert(zvim_ghostty_surface_update_config(second, argv[2]));
+        assert(near(background(state), 0x112233));
+        assert(near(background(second), 0x334455));
+        contains(state, "THEME_SENTINEL");
+        contains(second, "SECOND_TAB");
+        zvim_ghostty_surface_set_visible(second, false);
+        zvim_ghostty_surface_set_frame(state, 0, 24, 640, 376);
+        pump(state);
+        assert([second->view isHidden]);
+        contains(state, "AFTER_THEME");
+        zvim_ghostty_surface_set_frame(state, 0, 24, 640, 175);
+        zvim_ghostty_surface_set_frame(second, 0, 200, 640, 200);
+        zvim_ghostty_surface_set_visible(second, true);
+        assert(![state->view isHidden] && ![second->view isHidden]);
+        pump(state);
+        pump(second);
+        contains(state, "THEME_SENTINEL");
+        contains(second, "SECOND_TAB");
         zvim_ghostty_surface_set_visible(second, false);
         zvim_ghostty_surface_set_frame(state, 0, 24, 640, 376);
         zvim_ghostty_surface_set_visible(state, true);
@@ -112,8 +136,28 @@ int main(int argc, char **argv) {
         pump(state);
         assert(zvim_ghostty_surface_needs_confirm_quit(state));
         zvim_ghostty_surface_free(state);
+        // Shell exit must be observable without a subsequent keypress, even hidden.
+        for (int hidden = 0; hidden < 2; hidden++) {
+            state = zvim_ghostty_surface_new(window.contentView, "/tmp", "/bin/zsh",
+                false, argv[1], window, wake, approve);
+            assert(state != NULL);
+            zvim_ghostty_surface_set_frame(state, 0, 0, 640, 400);
+            zvim_ghostty_surface_set_visible(state, !hidden);
+            pump(state);
+            assert(zvim_ghostty_surface_is_alive(state));
+            unsigned before_exit = atomic_load(&wake_count);
+            zvim_ghostty_surface_text(state, "exit", 4);
+            zvim_ghostty_surface_key(state, GHOSTTY_ACTION_PRESS, 0, 0, 36, "\r", 13);
+            zvim_ghostty_surface_key(state, GHOSTTY_ACTION_RELEASE, 0, 0, 36, NULL, 13);
+            for (int attempt = 0; attempt < 10 && zvim_ghostty_surface_is_alive(state); attempt++) {
+                pump(state);
+            }
+            assert(!zvim_ghostty_surface_is_alive(state));
+            assert(atomic_load(&wake_count) > before_exit);
+            zvim_ghostty_surface_free(state);
+        }
         [window orderOut:nil];
-        puts("PASS: native colour update and restore; same live surface; output and input preserved; idle prompt and running job distinguished; independent tabs survive hide/show, resizing and closing another tab");
+        puts("PASS: native colour update and restore; same live surface; output and input preserved; idle prompt and running job distinguished; independent tabs and splits survive resizing, zoom/restore and closing another shell; visible and hidden shell exits notify without another keypress");
     }
     return 0;
 }

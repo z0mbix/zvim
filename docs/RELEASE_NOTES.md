@@ -1,13 +1,14 @@
 A focused Neovim frontend built with GPUI. This is an early development release.
 
-## New in 0.0.4
+## New in 0.0.5
 
-- Independent terminal tabs with a compact tab strip, new-tab and close buttons. Switching or hiding tabs preserves each shell, running program and scrollback.
-- Zed-style terminal defaults: Cmd+Shift+, toggles focus between terminal and editor; Cmd+Shift+. shows/hides the terminal; Cmd+Shift+Enter maximises/restores it.
-- With the terminal focused, Cmd+N creates a tab, Cmd+W closes it, Cmd+1–9 selects a tab, and Cmd+Shift+[ / ] switches tabs. Cmd+Alt+Left/Right also switches tabs.
-- Configure all seven terminal actions in Settings → Keybindings. Previous default backtick shortcuts migrate to the new defaults; custom shortcuts are preserved.
-- Window close and Quit check every terminal tab, including hidden tabs, before stopping running commands. New tabs use Neovim's current window-local directory.
-- Settings now has General and Keybindings tabs, smaller buttons and tighter spacing. Boolean settings use green switches when enabled and grey switches when disabled.
+- Terminal splits with independent tabs and draggable dividers. Cmd+D splits right, Cmd+Shift+D splits below, and Cmd+[ / ] focuses the left/right pane, matching the Zed defaults. These shortcuts are configurable in Settings → Keybindings.
+- Cmd+Shift+Enter zooms the focused terminal pane and restores the split layout. The Terminal menu also offers directional pane focus.
+- Exiting a shell automatically closes its tab. Empty splits collapse and remaining panes expand; the final terminal returns the space to the editor. Background exits preserve focus and do not reopen a hidden dock.
+- About Zvim in the macOS app menu displays the installed version.
+- Window size and position save shortly after moving/resizing, as well as on normal close. Corrected macOS title-bar sizing during restoration; fullscreen preserves the previous windowed placement.
+- Less rendering work: cached terminal themes, no hidden terminal control construction, allocation-free warmed text-cache lookups, and bounded cache eviction. Three paired release benchmarks measured 40–56% less editor CPU paint time across the tested workloads. This is not an equivalent claim about total application speed or input latency; see docs/PERFORMANCE.md for methodology and results.
+- Window geometry writes now run in an ordered background worker with atomic file replacement. Added `just run-release` and reproducible performance benchmarks for development.
 
 ## Install
 
@@ -17,6 +18,6 @@ Bundled Neovim 0.12.5 loads your existing Neovim configuration. No separate Ghos
 
 ## Known limitations
 
-The terminal is experimental: one pane per window with multiple tabs, but no terminal splits, search UI, persisted sessions or IME composition support. Split proportions are retained only while the window remains open. Linux requires Wayland for the terminal and remains experimental; this release ships a macOS Apple Silicon archive only.
+The terminal is experimental: no search UI, persisted sessions or IME composition support. Split proportions are retained only while the window remains open. Linux requires Wayland for the terminal and remains experimental; this release ships a macOS Apple Silicon archive only.
 
 macOS applications are ad-hoc signed, not Developer ID signed or notarised. Managed work laptops may require IT approval.

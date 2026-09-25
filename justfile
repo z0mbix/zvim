@@ -9,6 +9,12 @@ run *args:
     python3 scripts/bundle-ghostty.py
     cargo run --locked -- {{args}}
 
+# Optimised build for normal use and responsiveness comparisons.
+run-release *args:
+    cargo build --release --locked
+    python3 scripts/bundle-ghostty.py
+    cargo run --release --locked -- {{args}}
+
 check:
     cargo fmt --check
     cargo test --locked --all-targets

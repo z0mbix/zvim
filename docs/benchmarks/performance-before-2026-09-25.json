@@ -1,0 +1,395 @@
+{
+  "binary": "target/release/examples/performance_ui_before",
+  "runs": [
+    {
+      "editor": {
+        "terminal_ui": {
+          "n": 181,
+          "median_ms": 0.025,
+          "p95_ms": 0.038,
+          "max_ms": 0.335
+        },
+        "editor_render": {
+          "n": 181,
+          "median_ms": 0.135,
+          "p95_ms": 0.204,
+          "max_ms": 0.454
+        },
+        "grid_paint": {
+          "n": 181,
+          "median_ms": 2.91,
+          "p95_ms": 4.111,
+          "max_ms": 4.544
+        },
+        "redraw_decode": {
+          "n": 189,
+          "median_ms": 0.792,
+          "p95_ms": 1.234,
+          "max_ms": 2.904
+        },
+        "theme_sync": {
+          "n": 181,
+          "median_ms": 0.01,
+          "p95_ms": 0.03,
+          "max_ms": 0.054
+        }
+      },
+      "hidden_tabs": {
+        "terminal_ui": {
+          "n": 179,
+          "median_ms": 0.064,
+          "p95_ms": 0.095,
+          "max_ms": 0.153
+        },
+        "editor_render": {
+          "n": 179,
+          "median_ms": 0.168,
+          "p95_ms": 0.233,
+          "max_ms": 2.046
+        },
+        "grid_paint": {
+          "n": 179,
+          "median_ms": 2.79,
+          "p95_ms": 4.005,
+          "max_ms": 4.523
+        },
+        "redraw_decode": {
+          "n": 188,
+          "median_ms": 0.436,
+          "p95_ms": 1.343,
+          "max_ms": 3.188
+        },
+        "theme_sync": {
+          "n": 180,
+          "median_ms": 0.016,
+          "p95_ms": 0.046,
+          "max_ms": 0.084
+        }
+      },
+      "splits": {
+        "terminal_ui": {
+          "n": 179,
+          "median_ms": 0.076,
+          "p95_ms": 0.126,
+          "max_ms": 0.252
+        },
+        "editor_render": {
+          "n": 179,
+          "median_ms": 0.193,
+          "p95_ms": 0.272,
+          "max_ms": 0.525
+        },
+        "grid_paint": {
+          "n": 179,
+          "median_ms": 2.282,
+          "p95_ms": 2.763,
+          "max_ms": 3.348
+        },
+        "redraw_decode": {
+          "n": 186,
+          "median_ms": 0.6815,
+          "p95_ms": 1.284,
+          "max_ms": 4.427
+        },
+        "theme_sync": {
+          "n": 179,
+          "median_ms": 0.035,
+          "p95_ms": 0.047,
+          "max_ms": 0.103
+        }
+      },
+      "resize": {
+        "terminal_ui": {
+          "n": 180,
+          "median_ms": 0.036,
+          "p95_ms": 0.042,
+          "max_ms": 0.1
+        },
+        "editor_render": {
+          "n": 180,
+          "median_ms": 0.09,
+          "p95_ms": 0.108,
+          "max_ms": 0.228
+        },
+        "grid_paint": {
+          "n": 180,
+          "median_ms": 1.005,
+          "p95_ms": 1.26,
+          "max_ms": 1.384
+        },
+        "redraw_decode": {
+          "n": 680,
+          "median_ms": 0.129,
+          "p95_ms": 0.724,
+          "max_ms": 1.73
+        },
+        "theme_sync": {
+          "n": 265,
+          "median_ms": 0.019,
+          "p95_ms": 0.024,
+          "max_ms": 0.039
+        }
+      }
+    },
+    {
+      "editor": {
+        "terminal_ui": {
+          "n": 180,
+          "median_ms": 0.024,
+          "p95_ms": 0.033,
+          "max_ms": 0.146
+        },
+        "editor_render": {
+          "n": 180,
+          "median_ms": 0.1265,
+          "p95_ms": 0.199,
+          "max_ms": 0.263
+        },
+        "redraw_decode": {
+          "n": 188,
+          "median_ms": 0.429,
+          "p95_ms": 1.137,
+          "max_ms": 4.176
+        },
+        "grid_paint": {
+          "n": 180,
+          "median_ms": 2.775,
+          "p95_ms": 4.016,
+          "max_ms": 4.543
+        },
+        "theme_sync": {
+          "n": 180,
+          "median_ms": 0.009,
+          "p95_ms": 0.024,
+          "max_ms": 3.761
+        }
+      },
+      "hidden_tabs": {
+        "terminal_ui": {
+          "n": 181,
+          "median_ms": 0.064,
+          "p95_ms": 0.089,
+          "max_ms": 0.239
+        },
+        "editor_render": {
+          "n": 181,
+          "median_ms": 0.163,
+          "p95_ms": 0.248,
+          "max_ms": 0.385
+        },
+        "grid_paint": {
+          "n": 181,
+          "median_ms": 2.672,
+          "p95_ms": 3.962,
+          "max_ms": 4.353
+        },
+        "redraw_decode": {
+          "n": 189,
+          "median_ms": 0.551,
+          "p95_ms": 1.223,
+          "max_ms": 3.038
+        },
+        "theme_sync": {
+          "n": 181,
+          "median_ms": 0.016,
+          "p95_ms": 0.041,
+          "max_ms": 0.062
+        }
+      },
+      "splits": {
+        "terminal_ui": {
+          "n": 180,
+          "median_ms": 0.042,
+          "p95_ms": 0.051,
+          "max_ms": 0.1
+        },
+        "editor_render": {
+          "n": 180,
+          "median_ms": 0.105,
+          "p95_ms": 0.135,
+          "max_ms": 0.262
+        },
+        "grid_paint": {
+          "n": 180,
+          "median_ms": 1.0350000000000001,
+          "p95_ms": 1.224,
+          "max_ms": 1.337
+        },
+        "redraw_decode": {
+          "n": 186,
+          "median_ms": 0.285,
+          "p95_ms": 0.504,
+          "max_ms": 2.936
+        },
+        "theme_sync": {
+          "n": 180,
+          "median_ms": 0.017,
+          "p95_ms": 0.021,
+          "max_ms": 0.07
+        }
+      },
+      "resize": {
+        "terminal_ui": {
+          "n": 181,
+          "median_ms": 0.038,
+          "p95_ms": 0.044,
+          "max_ms": 0.083
+        },
+        "editor_render": {
+          "n": 181,
+          "median_ms": 0.094,
+          "p95_ms": 0.167,
+          "max_ms": 0.382
+        },
+        "grid_paint": {
+          "n": 181,
+          "median_ms": 0.983,
+          "p95_ms": 1.239,
+          "max_ms": 1.739
+        },
+        "redraw_decode": {
+          "n": 664,
+          "median_ms": 0.187,
+          "p95_ms": 0.861,
+          "max_ms": 1.344
+        },
+        "theme_sync": {
+          "n": 205,
+          "median_ms": 0.018,
+          "p95_ms": 0.023,
+          "max_ms": 0.157
+        }
+      }
+    },
+    {
+      "editor": {
+        "redraw_decode": {
+          "n": 189,
+          "median_ms": 0.42,
+          "p95_ms": 0.588,
+          "max_ms": 6.846
+        },
+        "theme_sync": {
+          "n": 181,
+          "median_ms": 0.01,
+          "p95_ms": 0.012,
+          "max_ms": 0.026
+        },
+        "terminal_ui": {
+          "n": 180,
+          "median_ms": 0.011,
+          "p95_ms": 0.013,
+          "max_ms": 0.024
+        },
+        "editor_render": {
+          "n": 180,
+          "median_ms": 0.063,
+          "p95_ms": 0.085,
+          "max_ms": 0.647
+        },
+        "grid_paint": {
+          "n": 180,
+          "median_ms": 1.616,
+          "p95_ms": 1.816,
+          "max_ms": 1.904
+        }
+      },
+      "hidden_tabs": {
+        "terminal_ui": {
+          "n": 181,
+          "median_ms": 0.036,
+          "p95_ms": 0.074,
+          "max_ms": 0.177
+        },
+        "editor_render": {
+          "n": 181,
+          "median_ms": 0.105,
+          "p95_ms": 0.216,
+          "max_ms": 3.115
+        },
+        "grid_paint": {
+          "n": 181,
+          "median_ms": 1.748,
+          "p95_ms": 3.514,
+          "max_ms": 4.123
+        },
+        "redraw_decode": {
+          "n": 188,
+          "median_ms": 0.6375,
+          "p95_ms": 4.21,
+          "max_ms": 8.263
+        },
+        "theme_sync": {
+          "n": 180,
+          "median_ms": 0.019,
+          "p95_ms": 0.033,
+          "max_ms": 0.065
+        }
+      },
+      "splits": {
+        "terminal_ui": {
+          "n": 180,
+          "median_ms": 0.043,
+          "p95_ms": 0.087,
+          "max_ms": 0.106
+        },
+        "editor_render": {
+          "n": 180,
+          "median_ms": 0.116,
+          "p95_ms": 0.237,
+          "max_ms": 0.306
+        },
+        "grid_paint": {
+          "n": 180,
+          "median_ms": 1.1495,
+          "p95_ms": 1.663,
+          "max_ms": 2.254
+        },
+        "redraw_decode": {
+          "n": 185,
+          "median_ms": 0.475,
+          "p95_ms": 2.358,
+          "max_ms": 6.789
+        },
+        "theme_sync": {
+          "n": 179,
+          "median_ms": 0.019,
+          "p95_ms": 0.022,
+          "max_ms": 0.083
+        }
+      },
+      "resize": {
+        "terminal_ui": {
+          "n": 181,
+          "median_ms": 0.038,
+          "p95_ms": 0.077,
+          "max_ms": 0.09
+        },
+        "editor_render": {
+          "n": 181,
+          "median_ms": 0.099,
+          "p95_ms": 0.208,
+          "max_ms": 3.2
+        },
+        "grid_paint": {
+          "n": 181,
+          "median_ms": 1.099,
+          "p95_ms": 2.01,
+          "max_ms": 4.708
+        },
+        "redraw_decode": {
+          "n": 642,
+          "median_ms": 0.2115,
+          "p95_ms": 1.794,
+          "max_ms": 16.074
+        },
+        "theme_sync": {
+          "n": 210,
+          "median_ms": 0.02,
+          "p95_ms": 0.047,
+          "max_ms": 0.081
+        }
+      }
+    }
+  ]
+}

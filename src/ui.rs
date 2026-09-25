@@ -5,6 +5,7 @@ use zvim::{
     input,
     session::{Event, Launch, Session},
     settings::Settings,
+    terminal_layout::{Axis, Direction},
 };
 
 actions!(
@@ -16,6 +17,7 @@ actions!(
         NewWindow,
         Quit,
         OpenSettings,
+        About,
         ToggleTerminal,
         MaximizeTerminal,
         CloseTerminal,
@@ -23,7 +25,13 @@ actions!(
         NewTerminal,
         PreviousTerminal,
         NextTerminal,
-        HideTerminal
+        HideTerminal,
+        SplitTerminalRight,
+        SplitTerminalDown,
+        TerminalPaneLeft,
+        TerminalPaneRight,
+        TerminalPaneUp,
+        TerminalPaneDown
     ]
 );
 
@@ -38,15 +46,25 @@ enum CloseTarget {
     Editor,
 }
 
+#[derive(Clone, Copy)]
+enum TerminalSpawn {
+    Tab(Option<u64>),
+    Split { pane: u64, axis: Axis },
+}
+
 pub struct Editor {
-    terminals: zvim::terminal_tabs::TerminalTabs<Entity<crate::terminal::Terminal>>,
+    terminals: zvim::terminal_layout::TerminalLayout<Entity<crate::terminal::Terminal>>,
     terminal_cwd: PathBuf,
-    terminal_tab_scroll: ScrollHandle,
+    terminal_tab_scroll: HashMap<u64, ScrollHandle>,
+    terminal_bounds: Bounds<Pixels>,
+    terminal_split_drag: Option<(u64, f32)>,
+    pending_terminals: std::collections::VecDeque<TerminalSpawn>,
     terminal_visible: bool,
     terminal_fraction: f32,
     terminal_maximized: bool,
     terminal_drag: Option<(Pixels, f32)>,
     terminal_theme: Option<zvim::terminal_theme::TerminalTheme>,
+    terminal_theme_config: zvim::terminal_theme::ThemeConfigCache,
     close_pending: bool,
     close_requested: bool,
     close_restore_terminal_focus: bool,
@@ -62,7 +80,7 @@ pub struct Editor {
     font: Font,
     font_size: f32,
     font_spec: String,
-    cache: HashMap<String, ShapedLine>,
+    cache: zvim::text_cache::TextCache<ShapedLine>,
     requested: (usize, usize),
     preedit: String,
     selection: Range<usize>,
@@ -72,10 +90,13 @@ pub struct Editor {
     font_resolution_ms: u128,
     applied_background: Option<bool>,
     appearance_ready: bool,
+    geometry_save_task: Option<Task<()>>,
+    persistent_window: bool,
 }
 impl Editor {
     pub fn new(launch: Launch, window: &mut Window, cx: &mut Context<Self>) -> Self {
         zvim::startup::mark("editor_create");
+        let persistent_window = launch.state_directory.is_none();
         let started = std::time::Instant::now();
         let focus = cx.focus_handle();
         window.focus(&focus);
@@ -119,10 +140,19 @@ impl Editor {
             .detach();
         cx.observe_window_activation(window, |_, _, cx| crate::preferences::refresh(cx))
             .detach();
+        cx.observe_window_bounds(window, |view, window, cx| {
+            view.geometry_save_task = Some(cx.spawn_in(window, async move |view, cx| {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(300))
+                    .await;
+                let _ = view.update_in(cx, |view, window, cx| view.save(window, cx));
+            }));
+        })
+        .detach();
         let weak = cx.entity().downgrade();
         window.on_window_should_close(cx, move |window, cx| {
             weak.update(cx, |v, cx| {
-                v.save(window);
+                v.save(window, cx);
                 if (v.exited || v.session.is_none()) && v.terminals.is_empty() {
                     true
                 } else {
@@ -135,12 +165,16 @@ impl Editor {
         Self {
             terminals: Default::default(),
             terminal_cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")),
-            terminal_tab_scroll: ScrollHandle::new(),
+            terminal_tab_scroll: HashMap::new(),
+            terminal_bounds: Bounds::default(),
+            terminal_split_drag: None,
+            pending_terminals: Default::default(),
             terminal_visible: false,
             terminal_fraction: 0.4,
             terminal_maximized: false,
             terminal_drag: None,
             terminal_theme: None,
+            terminal_theme_config: Default::default(),
             close_pending: false,
             close_requested: false,
             close_restore_terminal_focus: false,
@@ -156,7 +190,7 @@ impl Editor {
             font: font(default_font()),
             font_size: 16.,
             font_spec: String::new(),
-            cache: HashMap::new(),
+            cache: zvim::text_cache::TextCache::new(8192),
             requested: (100, 35),
             preedit: String::new(),
             selection: 0..0,
@@ -166,6 +200,8 @@ impl Editor {
             font_resolution_ms: 0,
             applied_background: None,
             appearance_ready: false,
+            geometry_save_task: None,
+            persistent_window,
         }
     }
     fn apply_appearance(&mut self, window: &Window, cx: &mut Context<Self>) {
@@ -184,36 +220,50 @@ impl Editor {
         }
     }
     fn sync_terminal_theme(&mut self, cx: &mut Context<Self>) {
+        let _span = zvim::startup::Span::new("theme_sync_begin", "theme_sync_end");
+        let theme = cx
+            .global::<crate::preferences::AppPreferences>()
+            .0
+            .terminal_follow_neovim
+            .then_some(self.terminal_theme.as_ref())
+            .flatten();
+        if !self
+            .terminal_theme_config
+            .update(theme, self.grid.foreground, self.grid.background)
+        {
+            return;
+        }
         for (_, terminal) in self.terminals.iter() {
-            let config = cx
-                .global::<crate::preferences::AppPreferences>()
-                .0
-                .terminal_follow_neovim
-                .then(|| {
-                    self.terminal_theme
-                        .as_ref()
-                        .map(|theme| theme.config(self.grid.foreground, self.grid.background))
-                })
-                .flatten();
+            let config = self.terminal_theme_config.config.clone();
             if let Err(error) = terminal.update(cx, |terminal, _| terminal.set_theme(config)) {
                 self.error = Some(format!("Cannot update terminal theme: {error}"));
                 cx.notify();
             }
         }
     }
-    fn save(&self, window: &Window) {
-        if !zvim::settings::Preferences::load().is_ok_and(|p| p.remember_window_geometry) {
+    fn save(&self, window: &Window, cx: &App) {
+        if !self.persistent_window
+            || window.is_fullscreen()
+            || !cx
+                .global::<crate::preferences::AppPreferences>()
+                .0
+                .remember_window_geometry
+        {
             return;
         }
         let bounds = window.window_bounds().get_bounds();
+        // GPUI's macOS constructor accepts content dimensions, but window_bounds
+        // returns the outer frame, including the native title bar.
+        #[cfg(target_os = "macos")]
+        let s = window.viewport_size();
+        #[cfg(not(target_os = "macos"))]
         let s = bounds.size;
-        Settings {
+        zvim::geometry_writer::submit(Settings {
             width: f32::from(s.width),
             height: f32::from(s.height),
             x: Some(f32::from(bounds.origin.x)),
             y: Some(f32::from(bounds.origin.y)),
-        }
-        .save();
+        });
     }
     fn close(&self) {
         if let Some(s) = &self.session {
@@ -231,10 +281,11 @@ impl Editor {
         }
     }
     fn hide_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(t) = self.terminals.active() {
+        for (_, t) in self.terminals.iter() {
             t.update(cx, |t, _| t.set_visible(false));
         }
         self.terminal_visible = false;
+        self.terminal_split_drag = None;
         self.terminal_maximized = false;
         self.terminal_drag = None;
         window.focus(&self.focus);
@@ -243,6 +294,7 @@ impl Editor {
     }
     fn reveal_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.terminal_visible = true;
+        self.sync_terminal_visibility(cx);
         if let Some(t) = self.terminals.active() {
             t.update(cx, |t, cx| t.focus(window, cx));
         }
@@ -275,6 +327,7 @@ impl Editor {
         {
             if !self.exited {
                 self.terminal_maximized = false;
+                self.sync_terminal_visibility(cx);
                 window.focus(&self.focus);
                 window.refresh();
                 cx.notify();
@@ -293,19 +346,80 @@ impl Editor {
             t.update(cx, |t, _| t.set_visible(false));
         }
         self.terminals.select(index);
-        self.terminal_tab_scroll.scroll_to_item(index);
+        self.scroll_terminal_tabs();
         self.reveal_terminal(window, cx);
     }
     fn new_terminal(&mut self, _: &NewTerminal, window: &mut Window, cx: &mut Context<Self>) {
         if self.close_pending || self.close_requested {
             return;
         }
+        self.request_terminal(
+            TerminalSpawn::Tab(self.terminals.focused_pane()),
+            window,
+            cx,
+        );
+    }
+    fn request_terminal(
+        &mut self,
+        target: TerminalSpawn,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.close_pending || self.close_requested {
+            return;
+        }
         if let Some(session) = &self.session {
+            self.pending_terminals.push_back(target);
             session.new_terminal();
         } else {
-            self.spawn_terminal(self.terminal_cwd.clone(), window, cx);
+            self.spawn_terminal(self.terminal_cwd.clone(), target, window, cx);
         }
     }
+    fn split_terminal(&mut self, axis: Axis, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(pane) = self.terminals.focused_pane() {
+            self.request_terminal(TerminalSpawn::Split { pane, axis }, window, cx);
+        } else {
+            self.new_terminal(&NewTerminal, window, cx);
+        }
+    }
+    fn sync_terminal_visibility(&self, cx: &mut Context<Self>) {
+        let visible = self.terminals.visible_ids(self.terminal_maximized);
+        for (id, terminal) in self.terminals.iter() {
+            terminal.update(cx, |terminal, _| {
+                terminal.set_visible(self.terminal_visible && visible.contains(id))
+            });
+        }
+    }
+    fn scroll_terminal_tabs(&self) {
+        if let Some(pane) = self.terminals.focused_pane()
+            && let Some(scroll) = self.terminal_tab_scroll.get(&pane)
+        {
+            scroll.scroll_to_item(self.terminals.active_index());
+        }
+    }
+    fn select_terminal_pane(&mut self, pane: u64, window: &mut Window, cx: &mut Context<Self>) {
+        if self.close_pending || self.close_requested {
+            return;
+        }
+        if self.terminals.focus_pane(pane) {
+            self.reveal_terminal(window, cx);
+        }
+    }
+    fn navigate_terminal(
+        &mut self,
+        direction: Direction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let size = self.terminal_bounds.size;
+        if let Some(pane) =
+            self.terminals
+                .neighbour(direction, f32::from(size.width), f32::from(size.height))
+        {
+            self.select_terminal_pane(pane, window, cx);
+        }
+    }
+
     fn maximize_terminal(
         &mut self,
         _: &MaximizeTerminal,
@@ -321,6 +435,7 @@ impl Editor {
         } else {
             self.terminal_maximized = !self.terminal_maximized;
         }
+        self.sync_terminal_visibility(cx);
         if let Some(terminal) = self.terminals.active() {
             terminal.update(cx, |t, cx| t.focus(window, cx));
         }
@@ -332,13 +447,26 @@ impl Editor {
             return;
         }
         if self.terminals.is_empty() {
-            self.spawn_terminal(cwd, window, cx);
+            self.spawn_terminal(cwd, TerminalSpawn::Tab(None), window, cx);
         } else {
             self.toggle_terminal(&ToggleTerminal, window, cx);
         }
     }
-    fn spawn_terminal(&mut self, cwd: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+    fn spawn_terminal(
+        &mut self,
+        cwd: PathBuf,
+        target: TerminalSpawn,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.close_pending || self.close_requested {
+            return;
+        }
+        let target_pane = match target {
+            TerminalSpawn::Tab(pane) => pane,
+            TerminalSpawn::Split { pane, .. } => Some(pane),
+        };
+        if target_pane.is_some_and(|pane| self.terminals.pane(pane).is_none()) {
             return;
         }
         let shell = std::env::var("SHELL")
@@ -350,14 +478,51 @@ impl Editor {
         options.configuration = gpui_libghostty::TerminalConfiguration::UserDefault;
         match crate::terminal::Terminal::spawn(options, window, cx) {
             Ok(t) => {
-                if let Some(previous) = self.terminals.active() {
-                    previous.update(cx, |t, _| t.set_visible(false));
-                }
-                self.terminals.push(t);
+                let terminal = t.clone();
+                let id = match target {
+                    TerminalSpawn::Tab(pane) => {
+                        if let Some(pane) = pane {
+                            self.terminals.focus_pane(pane);
+                        }
+                        self.terminals.push(t)
+                    }
+                    TerminalSpawn::Split { pane, axis } => {
+                        self.terminal_maximized = false;
+                        self.terminals
+                            .split(pane, axis, t)
+                            .expect("target pane exists")
+                    }
+                };
+                cx.subscribe_in(
+                    &terminal,
+                    window,
+                    move |view, _, _: &crate::terminal::TerminalFocused, _, cx| {
+                        if !view.close_pending
+                            && view.terminals.active_id() != Some(id)
+                            && view.terminals.focus_terminal(id)
+                        {
+                            view.sync_terminal_visibility(cx);
+                            cx.notify();
+                        }
+                    },
+                )
+                .detach();
+                cx.subscribe_in(
+                    &terminal,
+                    window,
+                    |view, _, _: &crate::terminal::TerminalExited, window, cx| {
+                        view.reap_exited_terminals(window, cx);
+                    },
+                )
+                .detach();
                 self.terminal_cwd = cwd;
-                self.terminal_tab_scroll
-                    .scroll_to_item(self.terminals.active_index());
+                self.scroll_terminal_tabs();
                 self.sync_terminal_theme(cx);
+                if let Err(error) = terminal.update(cx, |terminal, _| {
+                    terminal.set_theme(self.terminal_theme_config.config.clone())
+                }) {
+                    self.error = Some(format!("Cannot update terminal theme: {error}"));
+                }
                 self.reveal_terminal(window, cx);
                 window.on_next_frame(|window, _| window.refresh());
             }
@@ -366,6 +531,48 @@ impl Editor {
                 cx.notify();
             }
         }
+    }
+    fn reap_exited_terminals(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if self.close_pending {
+            return false;
+        }
+        let exited: Vec<_> = self
+            .terminals
+            .iter()
+            .filter(|(_, terminal)| !terminal.read(cx).is_alive())
+            .map(|(id, terminal)| (*id, terminal.read(cx).is_focused(window)))
+            .collect();
+        if exited.is_empty() {
+            return false;
+        }
+        let restore_focus = exited.iter().any(|(_, focused)| *focused);
+        for (id, _) in exited {
+            if let Some(terminal) = self.terminals.remove(id) {
+                terminal.update(cx, |terminal, _| terminal.set_visible(false));
+            }
+        }
+        self.terminal_split_drag = None;
+        self.terminal_tab_scroll
+            .retain(|pane, _| self.terminals.pane(*pane).is_some());
+        if self.terminals.is_empty() {
+            self.hide_terminal(window, cx);
+            if self.exited {
+                window.remove_window();
+                return true;
+            }
+        } else {
+            self.scroll_terminal_tabs();
+            self.sync_terminal_visibility(cx);
+            if restore_focus
+                && self.terminal_visible
+                && let Some(terminal) = self.terminals.active()
+            {
+                terminal.update(cx, |terminal, cx| terminal.focus(window, cx));
+            }
+            window.refresh();
+            cx.notify();
+        }
+        false
     }
     fn close_terminal(&mut self, _: &CloseTerminal, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.terminals.active_id() {
@@ -385,15 +592,22 @@ impl Editor {
                 self.close();
             }
             CloseTarget::Terminal(id) => {
+                if !self.terminals.iter().any(|(tab, _)| *tab == id) {
+                    return;
+                }
+                if let Some((_, terminal)) = self.terminals.iter().find(|(tab, _)| *tab == id) {
+                    terminal.update(cx, |terminal, _| terminal.set_visible(false));
+                }
                 self.terminals.remove(id);
+                self.terminal_tab_scroll
+                    .retain(|pane, _| self.terminals.pane(*pane).is_some());
                 if self.terminals.is_empty() {
                     self.hide_terminal(window, cx);
                     if self.exited {
                         window.remove_window();
                     }
                 } else {
-                    self.terminal_tab_scroll
-                        .scroll_to_item(self.terminals.active_index());
+                    self.scroll_terminal_tabs();
                     self.reveal_terminal(window, cx);
                 }
             }
@@ -429,8 +643,11 @@ impl Editor {
             .is_some_and(|t| t.read(cx).is_focused(window));
         // Composite a still frame while the native surface is hidden, so it cannot
         // paint over the modal and the terminal does not turn into an empty pane.
-        if let Some(terminal) = self.terminals.active() {
-            terminal.update(cx, |terminal, cx| terminal.prepare_close_prompt(cx));
+        let visible = self.terminals.visible_ids(self.terminal_maximized);
+        for (id, terminal) in self.terminals.iter() {
+            if self.terminal_visible && visible.contains(id) {
+                terminal.update(cx, |terminal, cx| terminal.prepare_close_prompt(cx));
+            }
         }
         self.close_pending = true;
         cx.notify();
@@ -446,6 +663,10 @@ impl Editor {
             let confirmed = answer.await.ok() == Some(1);
             let _ = view.update_in(cx, |v, w, cx| {
                 v.close_pending = false;
+                if v.reap_exited_terminals(w, cx) {
+                    return;
+                }
+                v.sync_terminal_visibility(cx);
                 if let Some(terminal) = v.terminals.active() {
                     terminal.update(cx, |terminal, cx| {
                         terminal.set_visible(v.terminal_visible);
@@ -459,7 +680,9 @@ impl Editor {
                 } else if v.exited
                     && let Some(terminal) = v.terminals.active()
                 {
+                    let terminal = terminal.clone();
                     v.terminal_visible = true;
+                    v.sync_terminal_visibility(cx);
                     terminal.update(cx, |terminal, cx| terminal.focus(w, cx));
                 }
                 w.refresh();
@@ -487,7 +710,11 @@ impl Editor {
                 self.sync_terminal_theme(cx);
             }
             Event::Terminal(cwd) => self.show_terminal(cwd, window, cx),
-            Event::NewTerminal(cwd) => self.spawn_terminal(cwd, window, cx),
+            Event::NewTerminal(cwd) => {
+                if let Some(target) = self.pending_terminals.pop_front() {
+                    self.spawn_terminal(cwd, target, window, cx);
+                }
+            }
             Event::Frame => {
                 zvim::startup::mark("frame_received");
                 if let Some(g) = self.session.as_ref().and_then(Session::take_frame) {
@@ -539,7 +766,7 @@ impl Editor {
                 if !self.terminals.is_empty() && !self.exit_confirmed {
                     self.terminal_visible = true;
                 }
-                self.save(window);
+                self.save(window, cx);
                 if success {
                     self.error = None;
                     if self.exit_confirmed {
@@ -745,56 +972,13 @@ impl Editor {
         window: &mut Window,
         _cx: &mut App,
     ) {
-        let (fg, special) = colors;
-        let key = format!(
-            "{text}\0{fg}:{special}:{}:{}:{}:{}:{}",
-            hl.bold, hl.italic, hl.underline, hl.undercurl, hl.strikethrough
-        );
-        if !self.cache.contains_key(&key) {
-            if self.cache.len() > 8192 {
-                self.cache.clear();
-            }
-            let mut font = self.font.clone();
-            if hl.bold {
-                font.weight = FontWeight::BOLD;
-            }
-            if hl.italic {
-                font.style = FontStyle::Italic;
-            }
-            let run = TextRun {
-                len: text.len(),
-                font,
-                color: rgb(fg).into(),
-                background_color: None,
-                underline: if hl.underline || hl.undercurl {
-                    Some(UnderlineStyle {
-                        thickness: px(1.),
-                        color: Some(rgb(special).into()),
-                        wavy: hl.undercurl,
-                    })
-                } else {
-                    None
-                },
-                strikethrough: if hl.strikethrough {
-                    Some(StrikethroughStyle {
-                        thickness: px(1.),
-                        color: Some(rgb(fg).into()),
-                    })
-                } else {
-                    None
-                },
-            };
-            let line = window.text_system().shape_line(
-                text.to_owned().into(),
-                px(self.font_size),
-                &[run],
-                None,
-            );
-            self.cache.insert(key.clone(), line);
+        CellPainter {
+            cache: &mut self.cache,
+            font: &self.font,
+            font_size: self.font_size,
+            cell_height: self.cell_height,
         }
-        if let Some(line) = self.cache.get(&key) {
-            paint_cell_line(line, hl, colors, origin, px(self.cell_height), window);
-        }
+        .text(text, hl, colors, origin, window);
     }
     fn paint(&mut self, window: &mut Window, cx: &mut App) {
         let trace_first = self.first_paint && self.grid.width > 0;
@@ -845,9 +1029,15 @@ impl Editor {
             }
         });
         window.paint_layer(self.bounds, |window| {
+            let mut painter = CellPainter {
+                cache: &mut self.cache,
+                font: &self.font,
+                font_size: self.font_size,
+                cell_height: self.cell_height,
+            };
             for r in 0..max_rows {
                 for c in 0..max_cols {
-                    let cell = self.grid.cells[r * self.grid.width + c].clone();
+                    let cell = &self.grid.cells[r * self.grid.width + c];
                     if cell.text.is_empty() {
                         continue;
                     }
@@ -861,13 +1051,16 @@ impl Editor {
                         continue;
                     }
                     let (fg, _, sp) = self.grid.colors(&h);
-                    self.text(
+                    painter.text(
                         &cell.text,
                         &h,
                         (fg, sp),
-                        self.cell_bounds(r, c, 1).origin,
+                        self.bounds.origin
+                            + point(
+                                px(self.cell_width * c as f32),
+                                px(self.cell_height * r as f32),
+                            ),
                         window,
-                        cx,
                     );
                 }
             }
@@ -955,6 +1148,76 @@ impl Editor {
         });
     }
 }
+struct CellPainter<'a> {
+    cache: &'a mut zvim::text_cache::TextCache<ShapedLine>,
+    font: &'a Font,
+    font_size: f32,
+    cell_height: f32,
+}
+impl CellPainter<'_> {
+    fn text(
+        &mut self,
+        text: &str,
+        hl: &Highlight,
+        colors: (u32, u32),
+        origin: Point<Pixels>,
+        window: &mut Window,
+    ) {
+        let (fg, special) = colors;
+        let key = zvim::text_cache::TextStyle {
+            foreground: fg,
+            special,
+            bold: hl.bold,
+            italic: hl.italic,
+            underline: hl.underline,
+            undercurl: hl.undercurl,
+            strikethrough: hl.strikethrough,
+        };
+        if let Some(line) = self.cache.get(key, text) {
+            paint_cell_line(line, hl, colors, origin, px(self.cell_height), window);
+        } else {
+            let mut font = (*self.font).clone();
+            if hl.bold {
+                font.weight = FontWeight::BOLD;
+            }
+            if hl.italic {
+                font.style = FontStyle::Italic;
+            }
+            let run = TextRun {
+                len: text.len(),
+                font,
+                color: rgb(fg).into(),
+                background_color: None,
+                underline: if hl.underline || hl.undercurl {
+                    Some(UnderlineStyle {
+                        thickness: px(1.),
+                        color: Some(rgb(special).into()),
+                        wavy: hl.undercurl,
+                    })
+                } else {
+                    None
+                },
+                strikethrough: if hl.strikethrough {
+                    Some(StrikethroughStyle {
+                        thickness: px(1.),
+                        color: Some(rgb(fg).into()),
+                    })
+                } else {
+                    None
+                },
+            };
+            let line = window.text_system().shape_line(
+                text.to_owned().into(),
+                px(self.font_size),
+                &[run],
+                None,
+            );
+            paint_cell_line(&line, hl, colors, origin, px(self.cell_height), window);
+            self.cache.insert(key, text, line);
+        }
+    }
+}
+
 /// Paint cached shaped cells inside an already ordered layer, preserving fallback
 /// runs, combining glyphs, colour emoji, and text decorations without a layer per cell.
 fn paint_cell_line(
@@ -1081,6 +1344,184 @@ fn parse_font(spec: &str, available: &[String]) -> (Font, f32) {
     (font, size)
 }
 
+impl Editor {
+    fn render_terminal_panes(
+        &mut self,
+        width: Pixels,
+        height: Pixels,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let _span = zvim::startup::Span::new("terminal_ui_begin", "terminal_ui_end");
+        let (panes, dividers) =
+            self.terminals
+                .layout(f32::from(width), f32::from(height), self.terminal_maximized);
+        let view = cx.entity().downgrade();
+        let mut content = div().relative().w_full().h(height).flex_shrink_0().child(
+            canvas(
+                move |bounds, _, cx| {
+                    let _ = view.update(cx, |view, _| view.terminal_bounds = bounds);
+                },
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .size_full(),
+        );
+        for (pane, rect) in panes {
+            let scroll = self.terminal_tab_scroll.entry(pane).or_default().clone();
+            let tabs = self.terminals.pane(pane).expect("layout leaf exists");
+            let focused = self.terminals.focused_pane() == Some(pane);
+            let active = tabs.active_id();
+            let terminal = tabs.active().cloned();
+            let strip = div()
+                .flex()
+                .items_center()
+                .w_full()
+                .h(px(24.))
+                .flex_shrink_0()
+                .bg(rgb(self.grid.background))
+                .text_color(rgb(self.grid.foreground))
+                .text_size(px(12.))
+                .child(
+                    div()
+                        .id(("terminal-tabs", pane))
+                        .flex()
+                        .flex_1()
+                        .min_w_0()
+                        .overflow_x_scroll()
+                        .track_scroll(&scroll)
+                        .children(tabs.iter().enumerate().map(|(index, (id, terminal))| {
+                            let selected = active == Some(*id);
+                            let alive = terminal.read(cx).is_alive();
+                            div()
+                                .id(("terminal-tab", *id))
+                                .flex()
+                                .flex_shrink_0()
+                                .items_center()
+                                .gap_2()
+                                .px_2()
+                                .h(px(24.))
+                                .border_b_2()
+                                .border_color(if selected {
+                                    if focused {
+                                        rgb(0x6789ee).into()
+                                    } else {
+                                        rgb(self.grid.foreground).into()
+                                    }
+                                } else {
+                                    transparent_black()
+                                })
+                                .cursor_pointer()
+                                .child(format!(
+                                    "{}: Terminal {}{}",
+                                    index + 1,
+                                    id,
+                                    if alive { "" } else { " · exited" }
+                                ))
+                                .on_click(cx.listener(move |v, _, w, cx| {
+                                    if !v.close_pending && !v.close_requested {
+                                        v.terminals.focus_pane(pane);
+                                        v.select_terminal(index, w, cx);
+                                    }
+                                }))
+                                .child(
+                                    div()
+                                        .id(("close-terminal-tab", *id))
+                                        .px_1()
+                                        .cursor_pointer()
+                                        .child("×")
+                                        .on_click(cx.listener(move |v, _, w, cx| {
+                                            if !v.close_pending && !v.close_requested {
+                                                v.terminals.focus_pane(pane);
+                                                v.select_terminal(index, w, cx);
+                                                v.close_terminal(&CloseTerminal, w, cx);
+                                            }
+                                            cx.stop_propagation();
+                                        })),
+                                )
+                        })),
+                )
+                .child(
+                    div()
+                        .id(("new-terminal-tab", pane))
+                        .px_2()
+                        .cursor_pointer()
+                        .child("+")
+                        .on_click(cx.listener(move |v, _, w, cx| {
+                            if !v.close_pending && !v.close_requested {
+                                v.terminals.focus_pane(pane);
+                                v.new_terminal(&NewTerminal, w, cx);
+                            }
+                        })),
+                );
+            content = content.child(
+                div()
+                    .absolute()
+                    .left(px(rect.x))
+                    .top(px(rect.y))
+                    .w(px(rect.width))
+                    .h(px(rect.height))
+                    .flex()
+                    .flex_col()
+                    .overflow_hidden()
+                    .child(strip)
+                    .when_some(terminal, |el, terminal| {
+                        el.child(
+                            div()
+                                .w_full()
+                                .h(px((rect.height - 24.).max(0.)))
+                                .child(terminal),
+                        )
+                    }),
+            );
+        }
+        // Painted last so the invisible grab area receives input over either pane.
+        for divider in dividers {
+            let r = divider.rect;
+            let horizontal = divider.axis == Axis::Horizontal;
+            content = content.child(
+                div()
+                    .absolute()
+                    .left(px(r.x))
+                    .top(px(r.y))
+                    .w(px(r.width))
+                    .h(px(r.height))
+                    .bg(rgb(0x666675))
+                    .child(
+                        div()
+                            .id(("terminal-split-divider", divider.id))
+                            .absolute()
+                            .left(px(if horizontal { -3. } else { 0. }))
+                            .top(px(if horizontal { 0. } else { -3. }))
+                            .w(px(if horizontal { 7. } else { r.width }))
+                            .h(px(if horizontal { r.height } else { 7. }))
+                            .cursor(if horizontal {
+                                CursorStyle::ResizeLeftRight
+                            } else {
+                                CursorStyle::ResizeUpDown
+                            })
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |v, event: &MouseDownEvent, _, cx| {
+                                    if !v.close_pending && !v.close_requested {
+                                        let grab = if horizontal {
+                                            f32::from(event.position.x - v.terminal_bounds.origin.x)
+                                                - r.x
+                                        } else {
+                                            f32::from(event.position.y - v.terminal_bounds.origin.y)
+                                                - r.y
+                                        };
+                                        v.terminal_split_drag = Some((divider.id, grab));
+                                    }
+                                    cx.stop_propagation();
+                                }),
+                            ),
+                    ),
+            );
+        }
+        content.into_any_element()
+    }
+}
+
 impl Focusable for Editor {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus.clone()
@@ -1088,6 +1529,7 @@ impl Focusable for Editor {
 }
 impl Render for Editor {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let _span = zvim::startup::Span::new("editor_render_begin", "editor_render_end");
         let height = window.viewport_size().height;
         let terminal_height = if self.terminal_visible {
             if self.exited || self.terminal_maximized {
@@ -1100,77 +1542,13 @@ impl Render for Editor {
         };
         let split = self.terminal_visible && !self.terminal_maximized && !self.exited;
         let drag_view = cx.entity().downgrade();
-        let tab_strip =
-            div()
-                .w_full()
-                .h(px(24.))
-                .flex_shrink_0()
-                .flex()
-                .items_center()
-                .bg(rgb(self.grid.background))
-                .text_color(rgb(self.grid.foreground))
-                .text_size(px(12.))
-                .child(
-                    div()
-                        .id("terminal-tabs")
-                        .flex()
-                        .flex_1()
-                        .min_w_0()
-                        .overflow_x_scroll()
-                        .track_scroll(&self.terminal_tab_scroll)
-                        .children(self.terminals.iter().enumerate().map(
-                            |(index, (id, terminal))| {
-                                let active = self.terminals.active_id() == Some(*id);
-                                let alive = terminal.read(cx).is_alive();
-                                div()
-                                    .id(("terminal-tab", *id))
-                                    .flex()
-                                    .flex_shrink_0()
-                                    .items_center()
-                                    .gap_2()
-                                    .px_2()
-                                    .h(px(24.))
-                                    .border_b_2()
-                                    .border_color(if active {
-                                        rgb(self.grid.foreground).into()
-                                    } else {
-                                        transparent_black()
-                                    })
-                                    .cursor_pointer()
-                                    .child(format!(
-                                        "{}: Terminal {}{}",
-                                        index + 1,
-                                        id,
-                                        if alive { "" } else { " · exited" }
-                                    ))
-                                    .on_click(cx.listener(move |v, _, w, cx| {
-                                        v.select_terminal(index, w, cx)
-                                    }))
-                                    .child(
-                                        div()
-                                            .id(("close-terminal-tab", *id))
-                                            .px_1()
-                                            .cursor_pointer()
-                                            .child("×")
-                                            .on_click(cx.listener(move |v, _, w, cx| {
-                                                if !v.close_pending && !v.close_requested {
-                                                    v.select_terminal(index, w, cx);
-                                                    v.close_terminal(&CloseTerminal, w, cx);
-                                                }
-                                                cx.stop_propagation();
-                                            })),
-                                    )
-                            },
-                        )),
-                )
-                .child(
-                    div()
-                        .id("new-terminal-tab")
-                        .px_2()
-                        .cursor_pointer()
-                        .child("+")
-                        .on_click(cx.listener(|v, _, w, cx| v.new_terminal(&NewTerminal, w, cx))),
-                );
+        let panes = self.terminal_visible.then(|| {
+            self.render_terminal_panes(
+                window.viewport_size().width,
+                (terminal_height - if split { px(1.) } else { px(0.) }).max(px(0.)),
+                cx,
+            )
+        });
         let mut root = div()
             .size_full()
             .relative()
@@ -1249,6 +1627,39 @@ impl Render for Editor {
                                 return;
                             }
                             let _ = view.update(cx, |v, cx| {
+                                if let Some((id, grab)) = v.terminal_split_drag {
+                                    if event.pressed_button != Some(MouseButton::Left) {
+                                        v.terminal_split_drag = None;
+                                    } else {
+                                        let bounds = v.terminal_bounds;
+                                        let (_, dividers) = v.terminals.layout(
+                                            f32::from(bounds.size.width),
+                                            f32::from(bounds.size.height),
+                                            false,
+                                        );
+                                        if let Some(divider) = dividers.iter().find(|d| d.id == id)
+                                        {
+                                            let (position, origin, length) = match divider.axis {
+                                                Axis::Horizontal => (
+                                                    f32::from(event.position.x - bounds.origin.x),
+                                                    divider.parent.x,
+                                                    divider.parent.width,
+                                                ),
+                                                Axis::Vertical => (
+                                                    f32::from(event.position.y - bounds.origin.y),
+                                                    divider.parent.y,
+                                                    divider.parent.height,
+                                                ),
+                                            };
+                                            v.terminals.resize(
+                                                id,
+                                                (position - origin - grab) / (length - 1.).max(1.),
+                                            );
+                                            cx.notify();
+                                        }
+                                        cx.stop_propagation();
+                                    }
+                                }
                                 if let Some((start, fraction)) = v.terminal_drag {
                                     if event.pressed_button != Some(MouseButton::Left) {
                                         v.terminal_drag = None;
@@ -1271,7 +1682,8 @@ impl Render for Editor {
                             if phase == DispatchPhase::Capture && event.button == MouseButton::Left
                             {
                                 let _ = view.update(cx, |v, cx| {
-                                    if v.terminal_drag.take().is_some() {
+                                    let split_drag = v.terminal_split_drag.take().is_some();
+                                    if v.terminal_drag.take().is_some() || split_drag {
                                         cx.stop_propagation();
                                         cx.notify();
                                     }
@@ -1286,6 +1698,26 @@ impl Render for Editor {
             .on_action(cx.listener(Self::close_terminal))
             .on_action(cx.listener(Self::new_terminal))
             .on_action(cx.listener(Self::focus_terminal))
+            .on_action(cx.listener(|v, _: &SplitTerminalRight, w, cx| {
+                v.split_terminal(Axis::Horizontal, w, cx)
+            }))
+            .on_action(cx.listener(|v, _: &SplitTerminalDown, w, cx| {
+                v.split_terminal(Axis::Vertical, w, cx)
+            }))
+            .on_action(cx.listener(|v, _: &TerminalPaneLeft, w, cx| {
+                v.navigate_terminal(Direction::Left, w, cx)
+            }))
+            .on_action(cx.listener(|v, _: &TerminalPaneRight, w, cx| {
+                v.navigate_terminal(Direction::Right, w, cx)
+            }))
+            .on_action(
+                cx.listener(|v, _: &TerminalPaneUp, w, cx| {
+                    v.navigate_terminal(Direction::Up, w, cx)
+                }),
+            )
+            .on_action(cx.listener(|v, _: &TerminalPaneDown, w, cx| {
+                v.navigate_terminal(Direction::Down, w, cx)
+            }))
             .on_action(cx.listener(|v, _: &HideTerminal, w, cx| {
                 if !v.exited && !v.close_pending && !v.close_requested {
                     v.hide_terminal(w, cx);
@@ -1352,18 +1784,7 @@ impl Render for Editor {
                                     ),
                             )
                         })
-                        .child(tab_strip)
-                        .when_some(self.terminals.active().cloned(), |el, terminal| {
-                            el.child(
-                                div()
-                                    .w_full()
-                                    .h((terminal_height
-                                        - px(24.)
-                                        - if split { px(1.) } else { px(0.) })
-                                    .max(px(0.)))
-                                    .child(terminal),
-                            )
-                        }),
+                        .children(panes),
                 )
             })
             .when_some(self.error.clone(), |el, error| {
@@ -1630,11 +2051,12 @@ pub fn request_close_all(cx: &mut App) {
                 .clone()
                 .downcast::<crate::preferences::PreferencesView>()
                 .is_ok()
+                || root.clone().downcast::<crate::about::AboutView>().is_ok()
             {
                 window.remove_window();
             } else if let Ok(editor) = root.downcast::<Editor>() {
                 editor.update(cx, |view, cx| {
-                    view.save(window);
+                    view.save(window, cx);
                     view.request_close(window, cx);
                 });
             }
