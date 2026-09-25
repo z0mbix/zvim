@@ -788,7 +788,7 @@ mod shortcut_tests {
                 canonical_shortcut(base).unwrap(),
                 canonical_shortcut(shifted).unwrap()
             );
-            assert!(shortcut_aliases(base).contains(&shifted.into()));
+            assert!(shortcut_aliases(base).contains(&Keystroke::parse(shifted).unwrap().unparse()));
         }
     }
 }
