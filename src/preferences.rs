@@ -6,6 +6,70 @@ use zvim::settings::{Preferences, Theme};
 pub struct AppPreferences(pub Preferences);
 impl Global for AppPreferences {}
 
+pub fn bind_keys(cx: &mut App) {
+    let p = &cx.global::<AppPreferences>().0;
+    let (toggle, maximize) =
+        if validate_shortcuts(&p.terminal_toggle_key, &p.terminal_maximize_key).is_ok() {
+            (
+                p.terminal_toggle_key.clone(),
+                p.terminal_maximize_key.clone(),
+            )
+        } else {
+            let defaults = Preferences::default();
+            (defaults.terminal_toggle_key, defaults.terminal_maximize_key)
+        };
+    cx.clear_key_bindings();
+    cx.bind_keys([
+        KeyBinding::new(&toggle, crate::ui::ToggleTerminal, Some("ZvimWindow")),
+        KeyBinding::new(&maximize, crate::ui::MaximizeTerminal, Some("ZvimWindow")),
+        KeyBinding::new(
+            if cfg!(target_os = "macos") {
+                "cmd-,"
+            } else {
+                "ctrl-shift-,"
+            },
+            crate::ui::OpenSettings,
+            None,
+        ),
+        KeyBinding::new("cmd-w", crate::ui::Close, Some("ZvimWindow")),
+        KeyBinding::new("cmd-q", crate::ui::Quit, None),
+        KeyBinding::new("cmd-n", crate::ui::NewWindow, None),
+    ]);
+}
+
+fn validate_shortcuts(toggle: &str, maximize: &str) -> anyhow::Result<()> {
+    let parse = |value: &str| -> anyhow::Result<Keystroke> {
+        let key = Keystroke::parse(value).map_err(|e| anyhow::anyhow!("{e}"))?;
+        anyhow::ensure!(
+            key.modifiers.control || key.modifiers.alt || key.modifiers.platform,
+            "Include Control, Option/Alt or Command/Super in the shortcut."
+        );
+        for reserved in [
+            "cmd-w",
+            "cmd-q",
+            "cmd-n",
+            "cmd-o",
+            "cmd-v",
+            "cmd-,",
+            "ctrl-shift-,",
+        ] {
+            let reserved = Keystroke::parse(reserved).unwrap();
+            anyhow::ensure!(
+                key.key != reserved.key || key.modifiers != reserved.modifiers,
+                "That shortcut is reserved by Zvim."
+            );
+        }
+        Ok(key)
+    };
+    let a = parse(toggle)?;
+    let b = parse(maximize)?;
+    anyhow::ensure!(
+        a.key != b.key || a.modifiers != b.modifiers,
+        "Show/hide and maximise/restore need different shortcuts."
+    );
+    Ok(())
+}
+
 pub fn refresh(cx: &mut App) {
     if let Ok(p) = Preferences::load()
         && p != cx.global::<AppPreferences>().0
@@ -31,9 +95,13 @@ enum Choice {
     CliDefault,
     CliInstall,
     Icon(&'static str),
+    RecordShortcut(bool),
+    ResetShortcuts,
 }
 
 pub struct PreferencesView {
+    recording_shortcut: Option<bool>,
+    _shortcut_interceptor: Subscription,
     focus: FocusHandle,
     buttons: Vec<FocusHandle>,
     error: Option<String>,
@@ -51,7 +119,17 @@ impl PreferencesView {
             .detach();
         cx.observe_window_activation(window, |_, _, cx| refresh(cx))
             .detach();
+        let view = cx.entity().downgrade();
+        let shortcut_interceptor = cx.intercept_keystrokes(move |_, window, cx| {
+            if let Some(view) = view.upgrade() {
+                let view = view.read(cx);
+                if view.recording_shortcut.is_some() && view.focus.contains_focused(window, cx) {
+                    cx.stop_propagation();
+                }
+            }
+        });
         Self {
+            _shortcut_interceptor: shortcut_interceptor,
             icon_images: APP_ICONS
                 .iter()
                 .map(|icon| {
@@ -61,10 +139,11 @@ impl PreferencesView {
                     )
                 })
                 .collect(),
+            recording_shortcut: None,
             focus,
             cli_message: None,
             cli_installing: false,
-            buttons: (0..(10 + APP_ICONS.len()) as isize)
+            buttons: (0..(13 + APP_ICONS.len()) as isize)
                 .map(|i| cx.focus_handle().tab_index(i).tab_stop(true))
                 .collect(),
             error: Preferences::load()
@@ -74,6 +153,12 @@ impl PreferencesView {
     }
     fn choose(&mut self, choice: Choice, cx: &mut Context<Self>) {
         match choice {
+            Choice::RecordShortcut(maximize) => {
+                self.recording_shortcut = Some(maximize);
+                self.error = None;
+                cx.notify();
+                return;
+            }
             Choice::CliDirectory => {
                 if self.cli_installing {
                     return;
@@ -147,6 +232,13 @@ impl PreferencesView {
         let result = (|| -> anyhow::Result<()> {
             let mut p = Preferences::load()?;
             match choice {
+                Choice::ResetShortcuts => {
+                    let defaults = Preferences::default();
+                    p.terminal_toggle_key = defaults.terminal_toggle_key;
+                    p.terminal_maximize_key = defaults.terminal_maximize_key;
+                    self.recording_shortcut = None;
+                }
+                Choice::RecordShortcut(_) => unreachable!(),
                 Choice::Theme(theme) => p.theme = theme,
                 Choice::Icon(id) => p.app_icon = id.into(),
                 Choice::Geometry => p.remember_window_geometry = !p.remember_window_geometry,
@@ -166,6 +258,42 @@ impl PreferencesView {
             .map(|e| format!("Settings were not saved: {e}"));
         cx.notify();
     }
+    fn record_shortcut(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
+        let Some(maximize) = self.recording_shortcut else {
+            return;
+        };
+        cx.stop_propagation();
+        if event.keystroke.key == "escape" {
+            self.recording_shortcut = None;
+            cx.notify();
+            return;
+        }
+        if matches!(
+            event.keystroke.key.as_str(),
+            "shift" | "control" | "alt" | "platform" | "function"
+        ) {
+            return;
+        }
+        if event.is_held {
+            return;
+        }
+        let result = (|| -> anyhow::Result<()> {
+            let mut p = Preferences::load()?;
+            if maximize {
+                p.terminal_maximize_key = event.keystroke.unparse();
+            } else {
+                p.terminal_toggle_key = event.keystroke.unparse();
+            }
+            validate_shortcuts(&p.terminal_toggle_key, &p.terminal_maximize_key)?;
+            p.save()?;
+            cx.set_global(AppPreferences(p));
+            self.recording_shortcut = None;
+            Ok(())
+        })();
+        self.error = result.err().map(|e| e.to_string());
+        cx.notify();
+    }
+
     fn save_cli_directory(&mut self, directory: std::path::PathBuf, cx: &mut Context<Self>) {
         let result = (|| -> anyhow::Result<()> {
             let mut preferences = Preferences::load()?;
@@ -237,6 +365,7 @@ impl Render for PreferencesView {
             .font_family(if cfg!(target_os="macos") { ".AppleSystemUIFont" } else { "sans-serif" })
             .text_size(px(14.)).bg(rgb(if d {0x1e2127} else {0xf5f6f9})).text_color(rgb(if d {0xe8ecf3} else {0x202632}))
             .track_focus(&self.focus)
+            .capture_key_down(cx.listener(|v, e, _, cx| v.record_shortcut(e, cx)))
             .on_action(cx.listener(|_, _: &crate::ui::Close, w, _| w.remove_window()))
             .on_key_down(cx.listener(|_, e: &KeyDownEvent, w, cx| {
                 match e.keystroke.key.as_str() {
@@ -268,7 +397,17 @@ impl Render for PreferencesView {
                 .child(div().flex().items_center().justify_between().gap_4()
                     .child(div().font_weight(FontWeight::SEMIBOLD).child("Terminal theme"))
                     .child(self.button(5, if p.terminal_follow_neovim {"Follow Neovim"} else {"Use Ghostty theme"},p.terminal_follow_neovim,Choice::TerminalTheme,d,cx)))
-                .child(div().text_color(muted).child("Updates terminal colours live. Fonts, shell settings and keybindings use your Ghostty configuration.")))
+                .child(div().text_color(muted).child("Updates terminal colours live. Fonts, shell settings and terminal shortcuts use your Ghostty configuration. Pane shortcuts are set below.")))
+            .child(div().flex().flex_col().gap_3()
+                .child(div().font_weight(FontWeight::SEMIBOLD).child("Terminal keybindings"))
+                .child(div().flex().items_center().justify_between().gap_4()
+                    .child(format!("Show / hide: {}", p.terminal_toggle_key))
+                    .child(self.button(10+APP_ICONS.len(), if self.recording_shortcut == Some(false) {"Press shortcut…"} else {"Change"}, false, Choice::RecordShortcut(false), d, cx)))
+                .child(div().flex().items_center().justify_between().gap_4()
+                    .child(format!("Maximise / restore: {}", p.terminal_maximize_key))
+                    .child(self.button(11+APP_ICONS.len(), if self.recording_shortcut == Some(true) {"Press shortcut…"} else {"Change"}, false, Choice::RecordShortcut(true), d, cx)))
+                .child(div().flex().child(self.button(12+APP_ICONS.len(), "Reset shortcuts", false, Choice::ResetShortcuts, d, cx)))
+                .child(div().text_color(muted).child("Click Change, then press a shortcut. Escape cancels. Changes apply immediately in the editor and terminal. Maximise fills the window; restore returns to your split size.")))
             .child(div().flex().flex_col().gap_3()
                 .child(div().font_weight(FontWeight::SEMIBOLD).child("Application icon"))
                 .child(div().flex().items_center().gap_4()
@@ -320,4 +459,18 @@ pub fn open(cx: &mut App) {
         eprintln!("Cannot open settings: {e:#}");
     }
     cx.activate(true);
+}
+
+#[cfg(test)]
+mod shortcut_tests {
+    use super::validate_shortcuts;
+    #[test]
+    fn rejects_conflicts_and_accepts_modified_shortcuts() {
+        assert!(validate_shortcuts("ctrl-`", "ctrl-shift-`").is_ok());
+        assert!(validate_shortcuts("alt-t", "ctrl-m").is_ok());
+        assert!(validate_shortcuts("alt-t", "alt-t").is_err());
+        assert!(validate_shortcuts("cmd-q", "ctrl-m").is_err());
+        assert!(validate_shortcuts("t", "ctrl-m").is_err());
+        assert!(validate_shortcuts("nonsense-key", "ctrl-m").is_err());
+    }
 }

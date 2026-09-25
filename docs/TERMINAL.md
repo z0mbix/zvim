@@ -1,6 +1,6 @@
 # Native Ghostty trial
 
-Zvim targets macOS and Linux. The terminal uses Ghostty's native Metal renderer on macOS and a Wayland/OpenGL surface on Linux; X11 remains editor-only. This is one optional, lazily created bottom pane per editor window. Ctrl+backtick, the Terminal menu and `:ZvimTerminal` toggle it. Hiding keeps the shell running. The initial cwd comes from Neovim's current window, including `:lcd`; an existing shell keeps its own cwd. The pane starts the user's `$SHELL` as a login shell, falling back to `/bin/sh`.
+Zvim targets macOS and Linux. The terminal uses Ghostty's native Metal renderer on macOS and a Wayland/OpenGL surface on Linux; X11 remains editor-only. This is one optional, lazily created bottom pane per editor window. Ctrl+backtick by default, the Terminal menu and `:ZvimTerminal` toggle it. Hiding keeps the shell running. The initial cwd comes from Neovim's current window, including `:lcd`; an existing shell keeps its own cwd. The pane starts the user's `$SHELL` as a login shell, falling back to `/bin/sh`.
 
 ## Build and packaging
 
@@ -17,7 +17,7 @@ On Ubuntu 24.04, `scripts/linux-dependencies.sh` installs the development librar
 - Foreground, background, cursor, selection and the 16 ANSI colours follow Neovim where defined. Missing ANSI and selection entries use the terminal's original Ghostty configuration. Neovim schemes that leave stale terminal globals themselves retain those values; Base46 uses its active `base_16` palette because its reload does not always refresh those globals.
 - Standard `ColorScheme`, `background` changes, NvChad's `NvThemeReload` and redraw highlight changes trigger a debounced palette read. Identical palettes are ignored. There is no periodic polling and no modification of user configuration files. Direct changes to terminal globals alone need `:doautocmd ColorScheme` to publish them.
 - User Ghostty fonts, shell settings and keybindings load at shell creation. Changing those files requires closing and recreating the terminal. Switching back to Use Ghostty theme restores that terminal's original configuration. Bundled resources take precedence over an inherited `GHOSTTY_RESOURCES_DIR`.
-- One session per window, fixed 40% height. No terminal tabs, split manager, search UI or persisted terminal sessions yet. Ghostty application actions such as new windows, tabs and settings are not wired to Zvim.
+- One session per window, initially 40% height. Drag the one-pixel divider to resize; its transparent grab area is wider than the line. Both panes retain at least 80 logical pixels where window size permits. The split proportion survives hide/show and maximise/restore within the window, but is not saved across app restarts. No terminal tabs, split manager, search UI or persisted terminal sessions yet. Ghostty application actions such as new windows, tabs and settings are not wired to Zvim.
 - The adapter handles key presses/releases, repeats, modifier keys, mouse input, selection, scrolling and clipboard. It does not implement a terminal IME composition interface; dead keys and CJK composition need further work. GPUI's abstract keys also lose some physical-key/keypad distinctions.
 - Ghostty's protected clipboard requests are denied when the embedder cannot obtain approval. Ordinary copy/paste follows Ghostty configuration; unsafe/multiline pastes can be refused. No clipboard approval UI is provided yet.
 - Native surfaces paint above GPUI content. Zvim hides the terminal before close prompts; future overlapping in-window UI needs explicit native-surface handling.
@@ -30,3 +30,9 @@ On Ubuntu 24.04, `scripts/linux-dependencies.sh` installs the development librar
 ## Validation
 
 The real-Neovim test checks `:ZvimTerminal` notifications with a quoted, window-local cwd and verifies that built-in terminal buffers still work. The theme integration test covers direct highlight updates, colour-scheme events, reverse selection colours, palette removal and Base46 reloads. After `cargo build --locked` and staging resources, `python3 scripts/test-terminal-theme.py` opens a temporary macOS test window and verifies rendered background changes and restoration while retaining the live surface, output and input. macOS runtime checks and final build results are recorded in `docs/VALIDATION.md`.
+
+## Pane shortcuts
+
+Settings → Terminal keybindings records replacements for show/hide (Control+backtick) and maximise/restore (Control+Shift+backtick). The maximised terminal fills the window content area without restarting the shell; restoring returns to the chosen split proportion. The Terminal menu exposes both actions even if a custom shortcut is unavailable.
+
+Changes save in preferences.json and update the app keymap immediately. Invalid hand-edited combinations fall back to the defaults. Shortcut recording requires Control, Alt/Option or Command/Super, rejects conflicts with other pane shortcuts and reserved app keys, and supports Escape to cancel and Reset shortcuts. Other Neovim/Ghostty shortcuts are still controlled by their respective configurations.

@@ -17,6 +17,7 @@ actions!(
         Quit,
         OpenSettings,
         ToggleTerminal,
+        MaximizeTerminal,
         CloseTerminal
     ]
 );
@@ -31,6 +32,9 @@ enum CloseTarget {
 pub struct Editor {
     terminal: Option<Entity<crate::terminal::Terminal>>,
     terminal_visible: bool,
+    terminal_fraction: f32,
+    terminal_maximized: bool,
+    terminal_drag: Option<(Pixels, f32)>,
     terminal_theme: Option<zvim::terminal_theme::TerminalTheme>,
     close_pending: bool,
     close_requested: bool,
@@ -120,6 +124,9 @@ impl Editor {
         Self {
             terminal: None,
             terminal_visible: false,
+            terminal_fraction: 0.4,
+            terminal_maximized: false,
+            terminal_drag: None,
             terminal_theme: None,
             close_pending: false,
             close_requested: false,
@@ -215,11 +222,16 @@ impl Editor {
             t.update(cx, |t, _| t.set_visible(false));
         }
         self.terminal_visible = false;
+        self.terminal_maximized = false;
+        self.terminal_drag = None;
         window.focus(&self.focus);
         window.refresh();
         cx.notify();
     }
     fn toggle_terminal(&mut self, _: &ToggleTerminal, window: &mut Window, cx: &mut Context<Self>) {
+        if self.close_pending {
+            return;
+        }
         if self.terminal_visible {
             if !self.exited {
                 self.hide_terminal(window, cx);
@@ -241,6 +253,27 @@ impl Editor {
                 cx,
             );
         }
+    }
+    fn maximize_terminal(
+        &mut self,
+        _: &MaximizeTerminal,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.exited || self.close_pending {
+            return;
+        }
+        if !self.terminal_visible {
+            self.toggle_terminal(&ToggleTerminal, window, cx);
+            self.terminal_maximized = true;
+        } else {
+            self.terminal_maximized = !self.terminal_maximized;
+        }
+        if let Some(terminal) = &self.terminal {
+            terminal.update(cx, |t, cx| t.focus(window, cx));
+        }
+        window.refresh();
+        cx.notify();
     }
     fn show_terminal(&mut self, cwd: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         if self.terminal_visible
@@ -990,14 +1023,16 @@ impl Render for Editor {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let height = window.viewport_size().height;
         let terminal_height = if self.terminal_visible {
-            if self.exited {
-                (height - px(56.)).max(px(0.))
+            if self.exited || self.terminal_maximized {
+                height
             } else {
-                height * 0.4
+                px(split_height(f32::from(height), self.terminal_fraction))
             }
         } else {
             px(0.)
         };
+        let split = self.terminal_visible && !self.terminal_maximized && !self.exited;
+        let drag_view = cx.entity().downgrade();
         let mut root = div()
             .size_full()
             .relative()
@@ -1052,23 +1087,71 @@ impl Render for Editor {
             });
         div()
             .size_full()
+            .relative()
             .flex()
             .flex_col()
             .key_context("ZvimWindow")
             .on_action(cx.listener(Self::open))
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::toggle_terminal))
+            .on_action(cx.listener(Self::maximize_terminal))
+            .child(
+                canvas(
+                    |_, _, _| {},
+                    move |_, _, window, _| {
+                        let view = drag_view.clone();
+                        window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+                            if phase != DispatchPhase::Capture {
+                                return;
+                            }
+                            let _ = view.update(cx, |v, cx| {
+                                if let Some((start, fraction)) = v.terminal_drag {
+                                    if event.pressed_button != Some(MouseButton::Left) {
+                                        v.terminal_drag = None;
+                                    } else {
+                                        let height = f32::from(window.viewport_size().height);
+                                        v.terminal_fraction = split_height(
+                                            height,
+                                            fraction
+                                                + f32::from(start - event.position.y)
+                                                    / height.max(1.),
+                                        ) / height.max(1.);
+                                        cx.stop_propagation();
+                                        cx.notify();
+                                    }
+                                }
+                            });
+                        });
+                        let view = drag_view.clone();
+                        window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
+                            if phase == DispatchPhase::Capture && event.button == MouseButton::Left
+                            {
+                                let _ = view.update(cx, |v, cx| {
+                                    if v.terminal_drag.take().is_some() {
+                                        cx.stop_propagation();
+                                        cx.notify();
+                                    }
+                                });
+                            }
+                        });
+                    },
+                )
+                .absolute()
+                .size_full(),
+            )
             .on_action(cx.listener(|v, _: &CloseTerminal, w, cx| {
                 v.confirm_terminal_close(CloseTarget::Terminal, w, cx)
             }))
             .on_action(cx.listener(|v, _: &Close, w, cx| v.request_close(w, cx)))
-            .child(
-                div()
-                    .w_full()
-                    .h(height - terminal_height)
-                    .flex_shrink_0()
-                    .child(editor),
-            )
+            .when(terminal_height < height, |root| {
+                root.child(
+                    div()
+                        .w_full()
+                        .h(height - terminal_height)
+                        .flex_shrink_0()
+                        .child(editor),
+                )
+            })
             .when(self.terminal_visible, |root| {
                 root.child(
                     div()
@@ -1077,38 +1160,45 @@ impl Render for Editor {
                         .flex_shrink_0()
                         .flex()
                         .flex_col()
-                        .child(
-                            div()
-                                .h(px(28.))
-                                .flex_shrink_0()
-                                .px_3()
-                                .flex()
-                                .items_center()
-                                .justify_between()
-                                .bg(rgb(0x24242b))
-                                .text_color(rgb(0xdddddd))
-                                .text_sm()
-                                .child(if self.exited {
-                                    "Terminal"
-                                } else {
-                                    "Ghostty · Ctrl+` to hide"
-                                })
-                                .child(
-                                    div()
-                                        .id("hide-terminal")
-                                        .cursor_pointer()
-                                        .child(if self.exited { "Close" } else { "Hide" })
-                                        .on_click(cx.listener(|v, _, w, cx| {
-                                            if v.exited {
-                                                v.request_close(w, cx);
-                                            } else {
-                                                v.hide_terminal(w, cx);
-                                            }
-                                        })),
-                                ),
-                        )
+                        .when(split, |pane| {
+                            pane.child(
+                                div()
+                                    .relative()
+                                    .w_full()
+                                    .h(px(1.))
+                                    .flex_shrink_0()
+                                    .bg(rgb(0x666675))
+                                    .child(
+                                        div()
+                                            .id("terminal-divider")
+                                            .absolute()
+                                            .top(px(-3.))
+                                            .w_full()
+                                            .h(px(7.))
+                                            .cursor(CursorStyle::ResizeUpDown)
+                                            .on_mouse_down(
+                                                MouseButton::Left,
+                                                cx.listener(move |v, e: &MouseDownEvent, _, cx| {
+                                                    if !v.close_pending {
+                                                        v.terminal_drag = Some((
+                                                            e.position.y,
+                                                            f32::from(terminal_height)
+                                                                / f32::from(height).max(1.),
+                                                        ));
+                                                    }
+                                                    cx.stop_propagation();
+                                                }),
+                                            ),
+                                    ),
+                            )
+                        })
                         .when_some(self.terminal.clone(), |el, terminal| {
-                            el.child(div().w_full().h(terminal_height - px(28.)).child(terminal))
+                            el.child(
+                                div()
+                                    .w_full()
+                                    .h(terminal_height - if split { px(1.) } else { px(0.) })
+                                    .child(terminal),
+                            )
                         }),
                 )
             })
@@ -1127,6 +1217,11 @@ impl Render for Editor {
             })
     }
 }
+fn split_height(height: f32, fraction: f32) -> f32 {
+    let minimum = 80_f32.min(height / 2.);
+    (height * fraction).clamp(minimum, (height - minimum).max(minimum))
+}
+
 fn button_name(b: MouseButton) -> &'static str {
     match b {
         MouseButton::Right => "right",
@@ -1385,7 +1480,15 @@ pub fn request_close_all(cx: &mut App) {
 
 #[cfg(test)]
 mod tests {
-    use super::{FontStyle, FontWeight, parse_font};
+    use super::{FontStyle, FontWeight, parse_font, split_height};
+    #[test]
+    fn terminal_split_keeps_both_panes_visible() {
+        assert_eq!(split_height(800., 0.4), 320.);
+        assert_eq!(split_height(800., -1.), 80.);
+        assert_eq!(split_height(800., 2.), 720.);
+        assert_eq!(split_height(100., 0.9), 50.);
+        assert_eq!(split_height(0., 0.4), 0.);
+    }
     #[test]
     fn chooses_installed_font_in_neovim_preference_list() {
         let (font, size) = parse_font("Missing Font,Menlo:h18,monospace", &["Menlo".into()]);

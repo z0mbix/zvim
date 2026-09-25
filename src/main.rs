@@ -82,22 +82,10 @@ fn main() {
         .detach();
         cx.on_action(|_: &ui::NewWindow, cx| ui::open_window(Launch::default(), cx));
         cx.on_action(|_: &ui::OpenSettings, cx| cx.defer(preferences::open));
-        cx.bind_keys([KeyBinding::new(
-            if cfg!(target_os = "macos") {
-                "cmd-,"
-            } else {
-                "ctrl-shift-,"
-            },
-            ui::OpenSettings,
-            None,
-        )]);
         cx.on_action(|_: &ui::Quit, cx| cx.defer(ui::request_close_all));
-        cx.bind_keys([
-            KeyBinding::new("ctrl-`", ui::ToggleTerminal, Some("ZvimWindow")),
-            KeyBinding::new("cmd-w", ui::Close, Some("ZvimWindow")),
-            KeyBinding::new("cmd-q", ui::Quit, None),
-            KeyBinding::new("cmd-n", ui::NewWindow, None),
-        ]);
+        preferences::bind_keys(cx);
+        cx.observe_global::<preferences::AppPreferences>(preferences::bind_keys)
+            .detach();
         cx.set_menus(vec![
             Menu {
                 name: "Zvim".into(),
@@ -118,6 +106,7 @@ fn main() {
                 name: "Terminal".into(),
                 items: vec![
                     MenuItem::action("Show / Hide Terminal", ui::ToggleTerminal),
+                    MenuItem::action("Maximise / Restore Terminal", ui::MaximizeTerminal),
                     MenuItem::action("Close Terminal…", ui::CloseTerminal),
                 ],
             },

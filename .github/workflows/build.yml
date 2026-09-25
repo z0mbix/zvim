@@ -39,8 +39,6 @@ jobs:
         include:
           - os: macos-15
             target: macos-arm64
-          - os: macos-15-intel
-            target: macos-x86_64
           - os: ubuntu-24.04
             target: linux-x86_64
     runs-on: ${{ matrix.os }}
@@ -104,7 +102,7 @@ jobs:
           import hashlib, os, pathlib
           folder = pathlib.Path('release')
           files = sorted(folder.iterdir())
-          expected = {'zvim-macos-arm64.zip', 'zvim-macos-x86_64.zip'}
+          expected = {'zvim-macos-arm64.zip'}
           assert {p.name for p in files} == expected, 'Missing or unexpected release archives'
           checksums = []
           for file in files:

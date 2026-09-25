@@ -66,6 +66,8 @@ pub struct Preferences {
     pub theme: Theme,
     pub sync_editor_appearance: bool,
     pub terminal_follow_neovim: bool,
+    pub terminal_toggle_key: String,
+    pub terminal_maximize_key: String,
     pub app_icon: String,
     pub cli_bin_directory: PathBuf,
 }
@@ -76,6 +78,8 @@ impl Default for Preferences {
             theme: Theme::System,
             sync_editor_appearance: false,
             terminal_follow_neovim: true,
+            terminal_toggle_key: "ctrl-`".into(),
+            terminal_maximize_key: "ctrl-shift-`".into(),
             app_icon: crate::icons::DEFAULT_ICON_ID.into(),
             cli_bin_directory: crate::cli_install::default_bin_directory(),
         }
@@ -114,6 +118,8 @@ mod tests {
         assert_eq!(p.app_icon, crate::icons::DEFAULT_ICON_ID);
         assert!(!p.sync_editor_appearance);
         assert!(p.terminal_follow_neovim);
+        assert_eq!(p.terminal_toggle_key, "ctrl-`");
+        assert_eq!(p.terminal_maximize_key, "ctrl-shift-`");
         assert_eq!(
             p.cli_bin_directory,
             crate::cli_install::default_bin_directory()
@@ -149,6 +155,8 @@ mod tests {
             remember_window_geometry: false,
             sync_editor_appearance: true,
             terminal_follow_neovim: false,
+            terminal_toggle_key: "alt-t".into(),
+            terminal_maximize_key: "alt-m".into(),
             app_icon: crate::icons::DEFAULT_ICON_ID.into(),
             cli_bin_directory: dir.join("custom bin"),
         };

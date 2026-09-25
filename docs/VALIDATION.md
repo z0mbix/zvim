@@ -95,3 +95,9 @@ All 27 Rust/Neovim tests passed, including execution of an installed launcher fr
 - The native macOS test verifies Ghostty requires confirmation for a running program, recognises an idle zsh prompt using isolated shell integration, then requires confirmation after starting `sleep` with a real Enter key. Existing Metal snapshot and live-theme checks still pass.
 - Window close and Quit now confirm terminal shutdown before initiating Neovim exit, with a captured terminal frame behind the modal. Cancelling the terminal question leaves the editor running; cancelling a subsequent Neovim save prompt resets the close attempt. Direct editor exit retains a full-window terminal if the user chooses Keep Terminal.
 - Neovim exit-hook cancellation was tested and rejected because an ExitPre exception does not reliably stop `:qall`. No interception hook remains in the implementation. Linux close detection and the full GPUI modal interaction still need interactive runtime QA; tests above exercise the native renderer and Neovim protocol independently.
+
+## Resizable terminal and pane shortcuts
+
+Automated checks cover split limits (including tiny windows), shortcut conflicts/reserved keys, old preference defaults and custom shortcut persistence. The full Rust/Neovim suite, formatting and strict Clippy pass. GPUI's capture routing and the native view's mouse pass-through were inspected, but live pointer dragging and shortcut recording have not been exercised in this session.
+
+Manual follow-up: drag in both directions and beyond the window bounds; hide/show; maximise/restore from each pane; record a replacement shortcut and confirm the old one reaches Neovim/Ghostty again; cancel recording and reject duplicate/reserved shortcuts; restart to check persistence. Confirm the same shell and running process survive all layout changes.
