@@ -101,3 +101,13 @@ All 27 Rust/Neovim tests passed, including execution of an installed launcher fr
 Automated checks cover split limits (including tiny windows), shortcut conflicts/reserved keys, old preference defaults and custom shortcut persistence. The full Rust/Neovim suite, formatting and strict Clippy pass. GPUI's capture routing and the native view's mouse pass-through were inspected, but live pointer dragging and shortcut recording have not been exercised in this session.
 
 Manual follow-up: drag in both directions and beyond the window bounds; hide/show; maximise/restore from each pane; record a replacement shortcut and confirm the old one reaches Neovim/Ghostty again; cancel recording and reject duplicate/reserved shortcuts; restart to check persistence. Confirm the same shell and running process survive all layout changes.
+
+## Terminal tabs and Zed-style defaults
+
+- All 36 Rust/Neovim tests pass, including tab retention, selection wraparound, stable close identities, shortcut migration and key routing by terminal/editor context. Real-Neovim coverage checks that new tabs use the current window-local directory, including quoted paths.
+- The native macOS smoke test passes with two independent shells. It verifies retained output and input after hiding/restoring and resizing, confirmation requirements for a hidden running shell, and survival of one shell after another is closed.
+- Full app pointer interaction with the tab strip has not been automated in this session. Linux/Wayland multi-surface behaviour remains unverified.
+
+## v0.0.4 release preparation
+
+The user reports that terminal tabs and the revised Settings UI work well in their local app. The Settings page has General and Keybindings tabs, compact buttons and green/grey switches. Existing automated coverage includes 36 Rust/Neovim tests and the native macOS two-shell smoke test described above.

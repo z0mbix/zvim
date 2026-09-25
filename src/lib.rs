@@ -13,3 +13,5 @@ pub mod startup;
 pub mod terminal_theme;
 
 pub mod cli_install;
+
+pub mod terminal_tabs;

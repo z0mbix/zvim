@@ -73,6 +73,29 @@ int main(int argc, char **argv) {
         assert(background(state) == initial);
         contains(state, "THEME_SENTINEL");
         assert(state->surface == original && zvim_ghostty_surface_is_alive(state));
+        // Switching native tabs must retain both live child processes and output.
+        zvim_ghostty_surface_set_visible(state, false);
+        zvim_ghostty_surface *second = zvim_ghostty_surface_new(window.contentView, "/tmp",
+            "/bin/sh -c 'echo SECOND_TAB; exec /bin/cat'", false, argv[1], window, wake, approve);
+        assert(second != NULL && second->surface != original);
+        zvim_ghostty_surface_set_frame(second, 0, 24, 640, 376);
+        zvim_ghostty_surface_set_visible(second, true);
+        pump(second);
+        contains(second, "SECOND_TAB");
+        assert(zvim_ghostty_surface_is_alive(state));
+        assert(zvim_ghostty_surface_needs_confirm_quit(state));
+        zvim_ghostty_surface_set_visible(second, false);
+        zvim_ghostty_surface_set_frame(state, 0, 24, 640, 376);
+        zvim_ghostty_surface_set_visible(state, true);
+        pump(state);
+        contains(state, "THEME_SENTINEL");
+        contains(state, "AFTER_THEME");
+        zvim_ghostty_surface_text(state, "RESTORED_TAB\n", 13);
+        pump(state);
+        contains(state, "RESTORED_TAB");
+        assert(zvim_ghostty_surface_is_alive(second));
+        zvim_ghostty_surface_free(second);
+        assert(zvim_ghostty_surface_is_alive(state));
         zvim_ghostty_surface_free(state);
         // Verify real shell integration distinguishes a prompt from a job.
         state = zvim_ghostty_surface_new(window.contentView, "/tmp", "/bin/zsh",
@@ -90,7 +113,7 @@ int main(int argc, char **argv) {
         assert(zvim_ghostty_surface_needs_confirm_quit(state));
         zvim_ghostty_surface_free(state);
         [window orderOut:nil];
-        puts("PASS: native colour update and restore; same live surface; output and input preserved; idle prompt and running job distinguished");
+        puts("PASS: native colour update and restore; same live surface; output and input preserved; idle prompt and running job distinguished; independent tabs survive hide/show, resizing and closing another tab");
     }
     return 0;
 }

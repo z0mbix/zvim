@@ -320,6 +320,19 @@ fn native_terminal_bridge_uses_current_window_directory() {
         );
         std::thread::sleep(Duration::from_millis(10));
     }
+    s.new_terminal();
+    let start = Instant::now();
+    loop {
+        if let Ok(Event::NewTerminal(cwd)) = s.events.try_recv() {
+            assert_eq!(cwd.canonicalize().unwrap(), local.canonicalize().unwrap());
+            break;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "new terminal notification missing"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
     // The GUI command must not replace Neovim's own terminal buffers.
     command(&s, "terminal");
     assert_eq!(eval(&s, "&buftype"), "terminal".into());

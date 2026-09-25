@@ -68,6 +68,13 @@ pub struct Preferences {
     pub terminal_follow_neovim: bool,
     pub terminal_toggle_key: String,
     pub terminal_maximize_key: String,
+    pub terminal_focus_key: String,
+    pub terminal_new_key: String,
+    pub terminal_close_key: String,
+    pub terminal_previous_key: String,
+    pub terminal_next_key: String,
+    #[serde(default)]
+    pub terminal_keymap_version: u8,
     pub app_icon: String,
     pub cli_bin_directory: PathBuf,
 }
@@ -78,8 +85,14 @@ impl Default for Preferences {
             theme: Theme::System,
             sync_editor_appearance: false,
             terminal_follow_neovim: true,
-            terminal_toggle_key: "ctrl-`".into(),
-            terminal_maximize_key: "ctrl-shift-`".into(),
+            terminal_toggle_key: "cmd-shift-.".into(),
+            terminal_maximize_key: "cmd-shift-enter".into(),
+            terminal_focus_key: "cmd-shift-,".into(),
+            terminal_new_key: "cmd-n".into(),
+            terminal_close_key: "cmd-w".into(),
+            terminal_previous_key: "cmd-shift-[".into(),
+            terminal_next_key: "cmd-shift-]".into(),
+            terminal_keymap_version: 1,
             app_icon: crate::icons::DEFAULT_ICON_ID.into(),
             cli_bin_directory: crate::cli_install::default_bin_directory(),
         }
@@ -91,9 +104,25 @@ impl Preferences {
     }
     fn load_from(dir: &std::path::Path) -> anyhow::Result<Self> {
         match std::fs::read(dir.join("preferences.json")) {
-            Ok(bytes) => Ok(serde_json::from_slice(&bytes)?),
+            Ok(bytes) => {
+                let mut preferences: Self = serde_json::from_slice(&bytes)?;
+                preferences.migrate_terminal_keys();
+                Ok(preferences)
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
             Err(e) => Err(e.into()),
+        }
+    }
+    fn migrate_terminal_keys(&mut self) {
+        if self.terminal_keymap_version == 0 {
+            let defaults = Self::default();
+            if self.terminal_toggle_key == "ctrl-`" {
+                self.terminal_toggle_key = defaults.terminal_toggle_key;
+            }
+            if self.terminal_maximize_key == "ctrl-shift-`" {
+                self.terminal_maximize_key = defaults.terminal_maximize_key;
+            }
+            self.terminal_keymap_version = 1;
         }
     }
     pub fn save(&self) -> anyhow::Result<()> {
@@ -108,9 +137,91 @@ impl Preferences {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TerminalShortcut {
+    Toggle,
+    Focus,
+    Maximize,
+    New,
+    Close,
+    Previous,
+    Next,
+}
+
+impl TerminalShortcut {
+    pub const ALL: [Self; 7] = [
+        Self::Toggle,
+        Self::Focus,
+        Self::Maximize,
+        Self::New,
+        Self::Close,
+        Self::Previous,
+        Self::Next,
+    ];
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Toggle => "Show / hide",
+            Self::Focus => "Focus terminal / editor",
+            Self::Maximize => "Maximise / restore",
+            Self::New => "New terminal tab",
+            Self::Close => "Close terminal tab",
+            Self::Previous => "Previous terminal tab",
+            Self::Next => "Next terminal tab",
+        }
+    }
+    pub fn key(self, p: &Preferences) -> &str {
+        match self {
+            Self::Toggle => &p.terminal_toggle_key,
+            Self::Focus => &p.terminal_focus_key,
+            Self::Maximize => &p.terminal_maximize_key,
+            Self::New => &p.terminal_new_key,
+            Self::Close => &p.terminal_close_key,
+            Self::Previous => &p.terminal_previous_key,
+            Self::Next => &p.terminal_next_key,
+        }
+    }
+    pub fn set(self, p: &mut Preferences, key: String) {
+        *match self {
+            Self::Toggle => &mut p.terminal_toggle_key,
+            Self::Focus => &mut p.terminal_focus_key,
+            Self::Maximize => &mut p.terminal_maximize_key,
+            Self::New => &mut p.terminal_new_key,
+            Self::Close => &mut p.terminal_close_key,
+            Self::Previous => &mut p.terminal_previous_key,
+            Self::Next => &mut p.terminal_next_key,
+        } = key;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Preferences, Theme};
+    #[test]
+    fn upgrades_old_defaults_but_preserves_custom_shortcuts() {
+        let mut old: Preferences = serde_json::from_str(
+            r#"{"terminal_toggle_key":"ctrl-`","terminal_maximize_key":"ctrl-shift-`"}"#,
+        )
+        .unwrap();
+        old.migrate_terminal_keys();
+        assert_eq!(
+            old.terminal_toggle_key,
+            Preferences::default().terminal_toggle_key
+        );
+        assert_eq!(
+            old.terminal_maximize_key,
+            Preferences::default().terminal_maximize_key
+        );
+        let mut custom: Preferences = serde_json::from_str(
+            r#"{"terminal_toggle_key":"alt-t","terminal_maximize_key":"alt-m"}"#,
+        )
+        .unwrap();
+        custom.migrate_terminal_keys();
+        assert_eq!(custom.terminal_toggle_key, "alt-t");
+        assert_eq!(custom.terminal_maximize_key, "alt-m");
+        custom.terminal_toggle_key = "ctrl-`".into();
+        custom.migrate_terminal_keys();
+        assert_eq!(custom.terminal_toggle_key, "ctrl-`");
+    }
     #[test]
     fn preferences_preserve_defaults_and_follow_system() {
         let p: Preferences = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
@@ -118,8 +229,8 @@ mod tests {
         assert_eq!(p.app_icon, crate::icons::DEFAULT_ICON_ID);
         assert!(!p.sync_editor_appearance);
         assert!(p.terminal_follow_neovim);
-        assert_eq!(p.terminal_toggle_key, "ctrl-`");
-        assert_eq!(p.terminal_maximize_key, "ctrl-shift-`");
+        assert_eq!(p.terminal_toggle_key, "cmd-shift-.");
+        assert_eq!(p.terminal_maximize_key, "cmd-shift-enter");
         assert_eq!(
             p.cli_bin_directory,
             crate::cli_install::default_bin_directory()
@@ -159,6 +270,7 @@ mod tests {
             terminal_maximize_key: "alt-m".into(),
             app_icon: crate::icons::DEFAULT_ICON_ID.into(),
             cli_bin_directory: dir.join("custom bin"),
+            ..Preferences::default()
         };
         p.save_to(&dir).unwrap();
         assert_eq!(Preferences::load_from(&dir).unwrap(), p);

@@ -16,6 +16,7 @@ use std::{
 
 pub enum Event {
     Terminal(PathBuf),
+    NewTerminal(PathBuf),
     TerminalTheme(crate::terminal_theme::TerminalTheme),
     Frame,
     CloseReturned,
@@ -321,10 +322,15 @@ impl Session {
                             Some("zvim_close_returned") => {
                                 let _ = reader_events.send_blocking(Event::CloseReturned);
                             }
-                            Some("zvim_terminal") => {
+                            Some(name @ ("zvim_terminal" | "zvim_new_terminal")) => {
                                 if let Some(cwd) = args.first().and_then(Value::as_str) {
-                                    let _ = reader_events
-                                        .send_blocking(Event::Terminal(PathBuf::from(cwd)));
+                                    let _ = reader_events.send_blocking(
+                                        if name == "zvim_new_terminal" {
+                                            Event::NewTerminal(PathBuf::from(cwd))
+                                        } else {
+                                            Event::Terminal(PathBuf::from(cwd))
+                                        },
+                                    );
                                 }
                             }
                             _ => {}
@@ -414,6 +420,16 @@ impl Session {
             child,
         })
     }
+    pub fn new_terminal(&self) {
+        self.rpc.send(
+            "nvim_exec_lua",
+            vec![
+                "vim.rpcnotify(vim.g.zvim_channel, 'zvim_new_terminal', vim.fn.getcwd())".into(),
+                Value::Array(vec![]),
+            ],
+        );
+    }
+
     pub fn set_appearance(&self, dark: Option<bool>) {
         self.rpc.send(
             "nvim_exec_lua",

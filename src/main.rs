@@ -106,8 +106,12 @@ fn main() {
                 name: "Terminal".into(),
                 items: vec![
                     MenuItem::action("Show / Hide Terminal", ui::ToggleTerminal),
+                    MenuItem::action("Focus Terminal / Editor", ui::FocusTerminal),
+                    MenuItem::action("New Terminal Tab", ui::NewTerminal),
+                    MenuItem::action("Previous Terminal Tab", ui::PreviousTerminal),
+                    MenuItem::action("Next Terminal Tab", ui::NextTerminal),
                     MenuItem::action("Maximise / Restore Terminal", ui::MaximizeTerminal),
-                    MenuItem::action("Close Terminal…", ui::CloseTerminal),
+                    MenuItem::action("Close Terminal Tab…", ui::CloseTerminal),
                 ],
             },
             Menu {

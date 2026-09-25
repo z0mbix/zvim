@@ -58,7 +58,7 @@ GUI-compatible Neovim options are forwarded in their original order, including s
 
 ## App settings
 
-Open **Zvim → Settings…** (`⌘,` on macOS; `Ctrl+Shift+,` elsewhere). Changes save automatically.
+Open **Zvim → Settings…** (`⌘,` on macOS; `Ctrl+Shift+,` elsewhere). General preferences and Keybindings have separate tabs. Compact switches are green when enabled and grey when disabled; changes save automatically.
 
 - **Appearance: System / Light / Dark** styles Zvim controls. System responds to desktop appearance changes; native titlebars continue to follow the OS.
 - **Sync editor appearance**, off by default, also sets Neovim's `background` option. Your colourscheme must support both appearances. NvChad/Base46 palettes are preserved unchanged because changing `background` resets their custom highlights; Zvim does not choose a replacement theme. Disabling sync restores the background from before sync was enabled unless you changed it yourself in Neovim. No configuration files are edited.
@@ -73,7 +73,7 @@ Preferences live in `preferences.json`, separate from `window.json`. Changes app
 - `zvim [files...]` loads your normal Neovim configuration. `zvim --clean [files...]` starts without it. Use `--` before a filename beginning with `-`.
 - Each window owns one bundled editor process. `g:zvim` is true before your configuration loads; `ZVIM=1` is also available to child tools.
 - Set `vim.opt.guifont = 'Menlo:h16'` (or your installed monospace font) and `vim.opt.linespace` in your configuration. Highlight colours and cursor shapes come from Neovim.
-- On macOS: Command-O opens files, Command-V pastes, Command-W requests close, Command-N opens a window, and Command-Q requests closing all windows. Ctrl shortcuts are forwarded to Neovim except the configured terminal pane shortcuts (Ctrl+backtick and Ctrl+Shift+backtick by default). Menus also expose Open, Paste, New Window, and Close.
+- On macOS: Command-O opens files, Command-V pastes, Command-W requests close (or closes the focused terminal tab), Command-N opens a window (or a terminal tab when the terminal is focused), and Command-Q requests closing all windows. Control-J focuses the terminal from Neovim normal/visual mode; other Control keys retain Neovim/terminal behaviour unless assigned in Settings. Menus also expose Open, Paste, New Window, and Close.
 - Mouse clicking, selection, dragging, and scrolling require Neovim's `mouse` option, for example `set mouse=a`.
 - The `+` and `*` registers use the system clipboard. Neovim's own register commands provide copy/cut; Zvim does not replace Ctrl-C.
 - File → Open, Finder's Open With, and file drops open files in the current session. Opening files never forces away unsaved edits.
@@ -85,15 +85,31 @@ Your existing plugins remain responsible for their own installations, external p
 
 ## Native terminal (experimental)
 
-Press **Ctrl+`** or choose **Terminal → Show / Hide Terminal**. From Neovim, use `:ZvimTerminal` (which you can map in your own configuration). The first opening starts `$SHELL -l` in Neovim's current window-local working directory. Hiding retains the shell, scrollback and running programs; showing resumes it. After a shell exits, hide and show the pane to start another.
+The terminal has independent shell tabs, a compact tab strip with **+** and close buttons, and a one-pixel draggable divider. The first opening and each new tab start `$SHELL -l` in Neovim's current window-local directory. Hiding or switching tabs keeps every shell, scrollback and running program alive. Exited shells retain their output until you close the tab; create another with **+** or **Cmd+N**.
 
-Drag the thin divider above the terminal to resize it. The split starts at 40% and retains your chosen proportion while that window is open, including after hiding or maximising. **Ctrl+Shift+backtick** or **Terminal → Maximise / Restore Terminal** fills the content area and restores the previous split. Hiding a maximised terminal returns focus to Neovim; reopening uses the split.
+Defaults mirror the terminal actions in the maintainer's Zed keymap, with Zed's standard previous/next-tab shortcuts:
 
-Under **Settings → Terminal keybindings**, click **Change** and press a modified shortcut for show/hide or maximise/restore. Escape cancels recording; **Reset shortcuts** restores the defaults. Shortcuts save automatically and apply immediately in both panes. Duplicate and reserved Zvim shortcuts are rejected. These pane shortcuts take precedence over Neovim and Ghostty bindings; other terminal shortcuts still use Ghostty configuration.
+| Action | macOS shortcut | Context |
+| --- | --- | --- |
+| Focus terminal / return to editor | Cmd+Shift+, (Cmd+<) | Either pane |
+| Show / hide terminal | Cmd+Shift+. (Cmd+>) | Either pane |
+| Maximise / restore terminal | Cmd+Shift+Enter | Either pane |
+| New terminal tab | Cmd+N | Terminal focused |
+| Close active terminal tab | Cmd+W | Terminal focused |
+| Previous / next terminal tab | Cmd+Shift+[ / ] or Cmd+Alt+Left / Right | Terminal focused |
+| Select terminal tab 1–9 | Cmd+1–9 | Terminal focused |
+| Hide terminal | Cmd+? | Terminal focused |
+| Close window | Cmd+Shift+W | Either pane |
 
-The pane uses Ghostty's native Metal renderer on macOS and OpenGL renderer on Linux/Wayland. It loads your Ghostty configuration for fonts and keybindings. Terminal colours follow Neovim live by default, including NvChad/Base46 themes; choose **Use Ghostty theme** under Settings → Terminal theme to opt out. Zvim's editor font remains controlled by Neovim. Ghostty application actions such as opening tabs/windows and settings are not implemented by this embedder. This first trial has one terminal per window, a resizable bottom pane, and no terminal search UI or session restoration. Built-in `:terminal` and existing terminal plugins retain Neovim's behaviour.
+Option+, / Option+. also focus/toggle the terminal from Neovim normal/visual mode; Control-J moves focus down to the terminal in those modes. Returning focus to the editor keeps the terminal visible and restores the split if it was maximised. Plain Cmd+[ / ] remain pane-navigation keys in Zed, not tab-selection keys; terminal splitting is not implemented in Zvim.
 
-Copy/paste use Ghostty bindings (normally Command-C/V on macOS, Ctrl-Shift-C/V on Linux). Terminal → Close Terminal asks before ending a live shell. Window close and Quit warn about terminal processes before closing Neovim; Cancel preserves the editor and shell. Idle prompts detected by Ghostty close quietly. If Neovim is quit directly, **Keep Terminal** expands the remaining session to fill the window.
+From Neovim, `:ZvimTerminal` still toggles visibility. Drag the divider to resize; the split starts at 40% and retains its proportion while that window stays open, including after hiding or maximising.
+
+Under **Settings → Keybindings**, record replacements for show/hide, focus, maximise, new tab, close tab and previous/next tab. Escape cancels recording; **Reset shortcuts** restores these defaults. Changes save automatically and apply immediately. Old default backtick shortcuts migrate to the new defaults; customised shortcuts are preserved. There is no runtime dependency on Zed or automatic rewriting of its keymap.
+
+The pane uses Ghostty's native Metal renderer on macOS and OpenGL renderer on Linux/Wayland. It loads your Ghostty configuration for fonts and keybindings. Terminal colours follow Neovim live by default, including NvChad/Base46 themes; disable **Follow Neovim terminal colours** under Settings → General to opt out. Zvim's editor font remains controlled by Neovim. Ghostty application actions such as opening tabs/windows and settings are not implemented by this embedder. The terminal provides multiple shell tabs in one resizable bottom pane, with no terminal splits, search UI or session restoration. Built-in `:terminal` and existing terminal plugins retain Neovim's behaviour.
+
+Copy/paste use Ghostty bindings (normally Command-C/V on macOS, Ctrl-Shift-C/V on Linux). Terminal → Close Terminal Tab asks before ending a running command. Closing the last tab hides the pane. Window close and Quit check all terminal tabs, including hidden ones, before closing Neovim; Cancel preserves the editor and shell. Idle prompts detected by Ghostty close quietly. If Neovim is quit directly, **Keep Terminal** expands the remaining session to fill the window.
 
 The native dependency and its patched Ghostty source are pinned in Cargo. The initial build compiles Ghostty using Zig and downloads its dependencies; no standalone Ghostty installation is required. The integration is a trial, not a claim of complete standalone Ghostty parity. See `docs/TERMINAL.md` for limitations and verification.
 
