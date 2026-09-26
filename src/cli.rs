@@ -17,6 +17,7 @@ pub struct Cli {
     pub launch: Launch,
     pub mode: Mode,
     pub child_args: Vec<OsString>,
+    pub wait: bool,
 }
 
 pub fn parse(args: impl IntoIterator<Item = OsString>, cwd: &Path) -> Result<Cli> {
@@ -57,6 +58,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>, cwd: &Path) -> Result<Cli
                         launch: Launch::default(),
                         mode: Mode::Help,
                         child_args: vec![],
+                        wait: false,
                     });
                 }
                 "--version" | "-v" => {
@@ -64,6 +66,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>, cwd: &Path) -> Result<Cli
                         launch: Launch::default(),
                         mode: Mode::Version,
                         child_args: vec![],
+                        wait: false,
                     });
                 }
                 "--" => {
@@ -175,10 +178,11 @@ pub fn parse(args: impl IntoIterator<Item = OsString>, cwd: &Path) -> Result<Cli
         },
         mode,
         child_args,
+        wait,
     })
 }
 
-pub const HELP: &str = "Zvim — a native Neovim frontend\nUsage: zvim [options] [directory] [files...]\n\nThe first file operand, if it is an existing directory, becomes the working\ndirectory before Neovim loads your configuration. Remaining relative paths\n(including option values) are resolved there. Otherwise the shell cwd is used.\n\n  zvim .                        Open the current directory\n  zvim ~/Projects/foo           Open a project\n  zvim -O left.rs right.rs       Vertical splits\n  zvim -o2 a.txt b.txt           Horizontal splits\n  zvim -p a.txt b.txt            Tab pages\n  zvim -R file.txt               Read-only\n  zvim -d before.txt after.txt   Diff mode\n  zvim +42 src/main.rs           Start at line 42\n  zvim --wait .                 Keep the launcher attached until the app exits\n\nThe installed launcher opens a new application instance and returns immediately.\nArguments after -- are filenames. Standard GUI-compatible Neovim arguments are\nforwarded in their original order. Headless, Ex/batch, standalone Lua, RPC,\nremote-client, and stdin-input modes are not supported. Use nvim for those.\n\nBundled Neovim options:\n";
+pub const HELP: &str = "Zvim — a native Neovim frontend\nUsage: zvim [options] [directory] [files...]\n\nThe first file operand, if it is an existing directory, becomes the working\ndirectory before Neovim loads your configuration. Remaining relative paths\n(including option values) are resolved there. Otherwise the shell cwd is used.\n\n  zvim .                        Open the current directory\n  zvim ~/Projects/foo           Open a project\n  zvim -O left.rs right.rs       Vertical splits\n  zvim -o2 a.txt b.txt           Horizontal splits\n  zvim -p a.txt b.txt            Tab pages\n  zvim -R file.txt               Read-only\n  zvim -d before.txt after.txt   Diff mode\n  zvim +42 src/main.rs           Start at line 42\n  zvim --wait .                 Keep the launcher attached until that window closes\n\nThe installed launcher opens a window in the running application and returns immediately.\nArguments after -- are filenames. Standard GUI-compatible Neovim arguments are\nforwarded in their original order. Headless, Ex/batch, standalone Lua, RPC,\nremote-client, and stdin-input modes are not supported. Use nvim for those.\n\nBundled Neovim options:\n";
 
 #[cfg(test)]
 mod tests {
@@ -234,6 +238,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(cli.mode, Mode::Gui);
+        assert!(cli.wait);
         assert_eq!(cli.child_args, args(&["-uNONE"]));
         assert_eq!(
             parse(args(&["--zvim-launch"]), &std::env::temp_dir())

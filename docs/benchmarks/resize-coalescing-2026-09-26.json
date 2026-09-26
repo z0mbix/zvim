@@ -1,0 +1,23 @@
+{
+  "method": "Real bundled Neovim; 100 resize submissions spaced by 2ms; slow case sleeps 25ms in VimResized; no GUI rendering; no concurrent builds or tests",
+  "runs": [
+    [
+      "slow=false coalesce=false submitted_ms=244.3 settled_ms=245.6 callbacks=100 final_width=199",
+      "slow=false coalesce=true submitted_ms=243.7 settled_ms=246.3 callbacks=100 final_width=199",
+      "slow=true coalesce=false submitted_ms=245.5 settled_ms=2643.3 callbacks=100 final_width=199",
+      "slow=true coalesce=true submitted_ms=246.9 settled_ms=311.9 callbacks=10 final_width=199"
+    ],
+    [
+      "slow=false coalesce=false submitted_ms=245.6 settled_ms=246.4 callbacks=100 final_width=199",
+      "slow=false coalesce=true submitted_ms=242.9 settled_ms=244.0 callbacks=100 final_width=199",
+      "slow=true coalesce=false submitted_ms=244.1 settled_ms=2655.4 callbacks=100 final_width=199",
+      "slow=true coalesce=true submitted_ms=248.2 settled_ms=282.7 callbacks=9 final_width=199"
+    ],
+    [
+      "slow=false coalesce=false submitted_ms=242.7 settled_ms=244.0 callbacks=100 final_width=199",
+      "slow=false coalesce=true submitted_ms=242.6 settled_ms=244.1 callbacks=100 final_width=199",
+      "slow=true coalesce=false submitted_ms=243.2 settled_ms=2653.4 callbacks=100 final_width=199",
+      "slow=true coalesce=true submitted_ms=246.1 settled_ms=312.3 callbacks=10 final_width=199"
+    ]
+  ]
+}

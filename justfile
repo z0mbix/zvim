@@ -24,6 +24,24 @@ package:
     cargo build --release --locked
     python3 scripts/package.py
 
+# macOS: quit Zvim first, then build and replace /Applications/Zvim.app.
+[macos]
+install-dev:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if pgrep -x zvim >/dev/null; then
+        echo "Quit Zvim before running just install-dev so the new build can be used." >&2
+        exit 1
+    fi
+    just package
+    packaged_app="dist/zvim-macos-$(uname -m)/Zvim.app"
+    test -d "$packaged_app"
+    codesign --verify --deep --strict "$packaged_app"
+    rm -rf /Applications/Zvim.app
+    ditto "$packaged_app" /Applications/Zvim.app
+    xattr -dr com.apple.quarantine /Applications/Zvim.app
+    echo "Installed development build. Launch it with: open /Applications/Zvim.app"
+
 install-cli:
     python3 scripts/install-cli.py
 

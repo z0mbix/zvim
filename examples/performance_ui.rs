@@ -6,6 +6,8 @@ mod about;
 mod preferences;
 #[path = "../src/terminal.rs"]
 mod terminal;
+#[path = "../src/terminal_search.rs"]
+mod terminal_search;
 #[path = "../src/ui.rs"]
 mod ui;
 use gpui::*;

@@ -21,3 +21,9 @@ pub mod terminal_layout;
 pub mod text_cache;
 
 pub mod geometry_writer;
+
+pub mod hover_focus;
+
+pub mod instance;
+
+pub mod latest_request;

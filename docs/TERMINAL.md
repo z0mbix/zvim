@@ -48,3 +48,12 @@ Each right/down split starts a new shell using Neovim's current window-local dir
 Cmd+Shift+Enter zooms the focused terminal pane into the window content area and restores the split tree and proportions. Hidden panes keep their shells alive. Closing a pane's last tab collapses its split and selects a sibling; other tabs and panes are retained. A close warning hides every visible native surface, and cancellation restores the prior layout and focus. New terminal requests remember their target pane while the working directory is retrieved, so an intervening focus change cannot redirect a split.
 
 The default terminal keymap deliberately preserves shell Control-H/J/K/L. The custom Zed file binds Cmd+[ / ] to horizontal pane navigation; it does not assign terminal up/down shortcuts.
+
+### Focus follows mouse
+
+Enable **Settings → General → Focus follows mouse** to focus visible terminal or editor content on pointer movement. It is off by default and applies live. The pointer must move: redraws and stationary-pointer events do not override keyboard focus. Only the active application window responds. Tab strips and divider grab areas are excluded, and selection drags, resizing and close-confirmation dialogs suspend hover focus. Hidden panes and the editor behind a zoomed terminal are not targets. This does not select inactive tabs or Neovim internal splits.
+
+
+### Scrollback search
+
+Cmd+F (Linux: Ctrl+Shift+F) opens a compact search bar for the focused terminal tab. Ghostty performs the search asynchronously and renders match highlights directly in its native surface. The bridge forwards search totals and selected-match events; it does not copy scrollback into GPUI. Enter/Shift+Enter and the arrow buttons navigate, Escape returns focus to the terminal. Search bars take 28 pixels above the native child so the child cannot obscure controls. Queries use the GPUI text input protocol, including UTF-16 ranges for composition. Search and match navigation shortcuts are reserved against terminal shortcut overrides.

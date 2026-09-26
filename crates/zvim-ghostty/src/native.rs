@@ -242,6 +242,16 @@ mod platform {
             surface: *mut RawSurface,
             path: *const c_char,
         ) -> bool;
+        fn zvim_ghostty_surface_binding_action(
+            surface: *mut RawSurface,
+            action: *const c_char,
+            length: usize,
+        ) -> bool;
+        fn zvim_ghostty_surface_search_status(
+            surface: *mut RawSurface,
+            total: *mut isize,
+            selected: *mut isize,
+        );
         fn zvim_ghostty_surface_tick(surface: *mut RawSurface);
         fn zvim_ghostty_surface_needs_confirm_quit(surface: *const RawSurface) -> bool;
         fn zvim_ghostty_surface_is_alive(surface: *const RawSurface) -> bool;
@@ -342,6 +352,24 @@ mod platform {
             })
         }
 
+        pub fn binding_action(&mut self, action: &str) -> bool {
+            // SAFETY: The surface is live and the borrowed bytes remain valid for this call.
+            unsafe {
+                zvim_ghostty_surface_binding_action(
+                    self.raw.as_ptr(),
+                    action.as_ptr().cast(),
+                    action.len(),
+                )
+            }
+        }
+        pub fn search_status(&self) -> (isize, isize) {
+            let (mut total, mut selected) = (-1, -1);
+            // SAFETY: Called on the surface UI thread with valid output pointers.
+            unsafe {
+                zvim_ghostty_surface_search_status(self.raw.as_ptr(), &mut total, &mut selected)
+            };
+            (total, selected)
+        }
         pub fn wakeup(&self) -> NativeWakeup {
             self.wakeup.clone()
         }

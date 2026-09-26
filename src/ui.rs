@@ -15,6 +15,9 @@ actions!(
         Close,
         Paste,
         NewWindow,
+        NextWindow,
+        MinimizeWindow,
+        PreviousWindow,
         Quit,
         OpenSettings,
         About,
@@ -57,6 +60,9 @@ pub struct Editor {
     terminal_cwd: PathBuf,
     terminal_tab_scroll: HashMap<u64, ScrollHandle>,
     terminal_bounds: Bounds<Pixels>,
+    hover_pointer: zvim::hover_focus::Pointer,
+    terminal_hover_regions: Vec<(u64, zvim::terminal_layout::Rect)>,
+    terminal_hover_exclusions: Vec<zvim::terminal_layout::Rect>,
     terminal_split_drag: Option<(u64, f32)>,
     pending_terminals: std::collections::VecDeque<TerminalSpawn>,
     terminal_visible: bool,
@@ -134,12 +140,19 @@ impl Editor {
         cx.observe_global_in::<crate::preferences::AppPreferences>(window, |v, w, cx| {
             v.apply_appearance(w, cx);
             v.sync_terminal_theme(cx);
+            cx.notify();
         })
         .detach();
         cx.observe_window_appearance(window, |v, w, cx| v.apply_appearance(w, cx))
             .detach();
-        cx.observe_window_activation(window, |_, _, cx| crate::preferences::refresh(cx))
-            .detach();
+        cx.observe_window_activation(window, |view, window, cx| {
+            view.hover_pointer.reset((
+                f32::from(window.mouse_position().x),
+                f32::from(window.mouse_position().y),
+            ));
+            crate::preferences::refresh(cx);
+        })
+        .detach();
         cx.observe_window_bounds(window, |view, window, cx| {
             view.geometry_save_task = Some(cx.spawn_in(window, async move |view, cx| {
                 cx.background_executor()
@@ -167,6 +180,16 @@ impl Editor {
             terminal_cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")),
             terminal_tab_scroll: HashMap::new(),
             terminal_bounds: Bounds::default(),
+            hover_pointer: {
+                let mut pointer = zvim::hover_focus::Pointer::default();
+                pointer.reset((
+                    f32::from(window.mouse_position().x),
+                    f32::from(window.mouse_position().y),
+                ));
+                pointer
+            },
+            terminal_hover_regions: Vec::new(),
+            terminal_hover_exclusions: Vec::new(),
             terminal_split_drag: None,
             pending_terminals: Default::default(),
             terminal_visible: false,
@@ -395,6 +418,59 @@ impl Editor {
             && let Some(scroll) = self.terminal_tab_scroll.get(&pane)
         {
             scroll.scroll_to_item(self.terminals.active_index());
+        }
+    }
+    fn follow_pointer(
+        &mut self,
+        event: &MouseMoveEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let permitted = cx
+            .global::<crate::preferences::AppPreferences>()
+            .0
+            .focus_follows_mouse
+            && window.is_window_active()
+            && event.pressed_button.is_none()
+            && !self.close_pending
+            && !self.close_requested
+            && self.terminal_drag.is_none()
+            && self.terminal_split_drag.is_none();
+        let position = (f32::from(event.position.x), f32::from(event.position.y));
+        if !self.hover_pointer.moved(position, permitted) {
+            return;
+        }
+        let editor = (!self.exited && !(self.terminal_visible && self.terminal_maximized))
+            .then_some(zvim::terminal_layout::Rect {
+                x: f32::from(self.bounds.origin.x),
+                y: f32::from(self.bounds.origin.y),
+                width: f32::from(self.bounds.size.width),
+                height: f32::from(self.bounds.size.height),
+            });
+        let (panes, excluded) = if self.terminal_visible {
+            (
+                self.terminal_hover_regions.as_slice(),
+                self.terminal_hover_exclusions.as_slice(),
+            )
+        } else {
+            (&[][..], &[][..])
+        };
+        match zvim::hover_focus::target(position, editor, panes, excluded) {
+            Some(zvim::hover_focus::Target::Editor) if !self.focus.is_focused(window) => {
+                window.focus(&self.focus);
+                cx.notify();
+            }
+            Some(zvim::hover_focus::Target::Terminal(pane)) => {
+                let focused = self
+                    .terminals
+                    .pane(pane)
+                    .and_then(|tabs| tabs.active())
+                    .is_some_and(|terminal| terminal.read(cx).is_focused(window));
+                if !focused {
+                    self.select_terminal_pane(pane, window, cx);
+                }
+            }
+            _ => {}
         }
     }
     fn select_terminal_pane(&mut self, pane: u64, window: &mut Window, cx: &mut Context<Self>) {
@@ -813,6 +889,9 @@ impl Editor {
         }
     }
     fn key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.focus.is_focused(window) {
+            return;
+        }
         if event.keystroke.key == "escape" && !self.exited {
             self.error = None;
             cx.notify();
@@ -1355,11 +1434,77 @@ impl Editor {
         let (panes, dividers) =
             self.terminals
                 .layout(f32::from(width), f32::from(height), self.terminal_maximized);
+        let hover_enabled = cx
+            .global::<crate::preferences::AppPreferences>()
+            .0
+            .focus_follows_mouse;
+        let hover_panes = if hover_enabled {
+            panes.clone()
+        } else {
+            Vec::new()
+        };
+        let hover_dividers = if hover_enabled {
+            dividers.clone()
+        } else {
+            Vec::new()
+        };
         let view = cx.entity().downgrade();
         let mut content = div().relative().w_full().h(height).flex_shrink_0().child(
             canvas(
                 move |bounds, _, cx| {
-                    let _ = view.update(cx, |view, _| view.terminal_bounds = bounds);
+                    let _ = view.update(cx, |view, _| {
+                        use zvim::terminal_layout::Rect;
+                        view.terminal_bounds = bounds;
+                        if !hover_enabled {
+                            view.terminal_hover_regions.clear();
+                            view.terminal_hover_exclusions.clear();
+                            return;
+                        }
+                        let x = f32::from(bounds.origin.x);
+                        let y = f32::from(bounds.origin.y);
+                        view.terminal_hover_regions = hover_panes
+                            .iter()
+                            .map(|(id, rect)| {
+                                (
+                                    *id,
+                                    Rect {
+                                        x: x + rect.x,
+                                        y: y + rect.y + 24.,
+                                        width: rect.width,
+                                        height: (rect.height - 24.).max(0.),
+                                    },
+                                )
+                            })
+                            .collect();
+                        view.terminal_hover_exclusions = hover_dividers
+                            .iter()
+                            .map(|divider| {
+                                let r = divider.rect;
+                                match divider.axis {
+                                    Axis::Horizontal => Rect {
+                                        x: x + r.x - 3.,
+                                        y: y + r.y,
+                                        width: 7.,
+                                        height: r.height,
+                                    },
+                                    Axis::Vertical => Rect {
+                                        x: x + r.x,
+                                        y: y + r.y - 3.,
+                                        width: r.width,
+                                        height: 7.,
+                                    },
+                                }
+                            })
+                            .collect();
+                        if !view.terminal_maximized && !view.exited {
+                            view.terminal_hover_exclusions.push(Rect {
+                                x,
+                                y: y - 4.,
+                                width: f32::from(bounds.size.width),
+                                height: 7.,
+                            });
+                        }
+                    });
                 },
                 |_, _, _, _| {},
             )
@@ -1627,6 +1772,7 @@ impl Render for Editor {
                                 return;
                             }
                             let _ = view.update(cx, |v, cx| {
+                                v.follow_pointer(event, window, cx);
                                 if let Some((id, grab)) = v.terminal_split_drag {
                                     if event.pressed_button != Some(MouseButton::Left) {
                                         v.terminal_split_drag = None;
@@ -1965,6 +2111,12 @@ impl EntityInputHandler for Editor {
 }
 
 pub fn open_window(launch: Launch, cx: &mut App) {
+    open_window_inner(launch, None, cx);
+}
+pub fn open_requested_window(request: zvim::instance::Incoming, cx: &mut App) {
+    open_window_inner(request.launch.clone(), Some(request), cx);
+}
+fn open_window_inner(launch: Launch, request: Option<zvim::instance::Incoming>, cx: &mut App) {
     zvim::startup::mark("window_open_begin");
     crate::preferences::refresh(cx);
     let settings = if cx
@@ -1996,7 +2148,7 @@ pub fn open_window(launch: Launch, cx: &mut App) {
             bounds = candidate;
         }
     }
-    if let Err(e) = cx.open_window(
+    match cx.open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             app_id: Some("zvim".into()),
@@ -2012,7 +2164,21 @@ pub fn open_window(launch: Launch, cx: &mut App) {
             cx.new(|cx| Editor::new(launch, w, cx))
         },
     ) {
-        eprintln!("Cannot open Zvim window: {e:#}");
+        Ok(handle) => {
+            if let Some(request) = request {
+                let completion = request.opened();
+                let _ = handle.update(cx, |_, _, cx| {
+                    cx.on_release(move |_, _| drop(completion)).detach();
+                });
+            }
+        }
+        Err(error) => {
+            if let Some(request) = request {
+                request.reject(format!("Cannot open Zvim window: {error:#}"));
+            } else {
+                eprintln!("Cannot open Zvim window: {error:#}");
+            }
+        }
     }
     zvim::startup::mark("window_open_end");
     cx.activate(true);

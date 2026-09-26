@@ -1,14 +1,26 @@
 mod about;
 mod preferences;
 mod terminal;
+mod terminal_search;
 mod ui;
 use gpui::*;
 use zvim::session::Launch;
 fn main() {
+    if let Err(error) = run() {
+        eprintln!("zvim: {error:#}");
+        std::process::exit(1);
+    }
+}
+fn run() -> anyhow::Result<()> {
     terminal::configure_resources();
     zvim::startup::mark("main");
+    let mut arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
+    let host = arguments == [std::ffi::OsString::from("--zvim-host")];
+    if host {
+        arguments.clear();
+    }
     let cli = match zvim::cli::parse(
-        std::env::args_os().skip(1),
+        arguments,
         &std::env::current_dir().expect("working directory unavailable"),
     ) {
         Ok(cli) => cli,
@@ -41,16 +53,43 @@ fn main() {
                 }
             }
         }
-        zvim::cli::Mode::Detached => {
-            if let Err(error) = detach(&cli.child_args) {
-                eprintln!("zvim: {error:#}");
-                std::process::exit(1);
-            }
-            return;
-        }
-        zvim::cli::Mode::Gui => {}
+        zvim::cli::Mode::Detached | zvim::cli::Mode::Gui => {}
     }
-    let launch = cli.launch;
+    let dir = zvim::settings::data_dir();
+    let message = zvim::instance::Message::new(&cli.launch, cli.wait)?;
+    if !host && (cli.mode == zvim::cli::Mode::Detached || cli.wait) {
+        if let Ok(stream) = zvim::instance::connect(&dir) {
+            return zvim::instance::forward(stream, &message);
+        }
+        let mut child = detach()?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        loop {
+            if let Ok(stream) = zvim::instance::connect(&dir) {
+                return zvim::instance::forward(stream, &message);
+            }
+            if let Some(status) = child.try_wait()?
+                && !status.success()
+            {
+                anyhow::bail!("Cannot start Zvim; see launcher.log ({status})");
+            }
+            if std::time::Instant::now() >= deadline {
+                anyhow::bail!("Timed out starting Zvim; see launcher.log");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+    }
+    let server = match zvim::instance::Server::acquire(&dir)? {
+        zvim::instance::Role::Primary(server) => server,
+        zvim::instance::Role::Secondary(stream) => {
+            return if host {
+                Ok(())
+            } else {
+                zvim::instance::forward(stream, &message)
+            };
+        }
+    };
+    let requests = server.requests.clone();
+    let launch = (!host).then_some(cli.launch);
     zvim::startup::mark("application_create_begin");
     let app = Application::new();
     zvim::startup::mark("application_create_end");
@@ -63,6 +102,12 @@ fn main() {
         cx.set_global(preferences::AppPreferences(
             zvim::settings::Preferences::load().unwrap_or_default(),
         ));
+        cx.spawn(async move |cx| {
+            while let Ok(request) = requests.recv().await {
+                let _ = cx.update(|cx| ui::open_requested_window(request, cx));
+            }
+        })
+        .detach();
         cx.spawn(async move |cx| {
             while let Ok(urls) = urls_rx.recv().await {
                 let paths = urls
@@ -91,6 +136,15 @@ fn main() {
         cx.on_action(|_: &ui::OpenSettings, cx| cx.defer(preferences::open));
         cx.on_action(|_: &ui::About, cx| cx.defer(about::open));
         cx.on_action(|_: &ui::Quit, cx| cx.defer(ui::request_close_all));
+        cx.on_action(|_: &ui::MinimizeWindow, cx| {
+            cx.defer(|cx| {
+                if let Some(handle) = cx.active_window() {
+                    let _ = handle.update(cx, |_, window, _| window.minimize_window());
+                }
+            })
+        });
+        cx.on_action(|_: &ui::NextWindow, cx| cx.defer(|cx| cycle_window(false, cx)));
+        cx.on_action(|_: &ui::PreviousWindow, cx| cx.defer(|cx| cycle_window(true, cx)));
         preferences::bind_keys(cx);
         cx.observe_global::<preferences::AppPreferences>(preferences::bind_keys)
             .detach();
@@ -115,6 +169,7 @@ fn main() {
             Menu {
                 name: "Terminal".into(),
                 items: vec![
+                    MenuItem::action("Find in Terminal…", terminal::Find),
                     MenuItem::action("Show / Hide Terminal", ui::ToggleTerminal),
                     MenuItem::action("Focus Terminal / Editor", ui::FocusTerminal),
                     MenuItem::action("New Terminal Tab", ui::NewTerminal),
@@ -131,16 +186,37 @@ fn main() {
                 ],
             },
             Menu {
+                name: "Window".into(),
+                items: vec![
+                    MenuItem::action("Next Window", ui::NextWindow),
+                    MenuItem::action("Previous Window", ui::PreviousWindow),
+                ],
+            },
+            Menu {
                 name: "Edit".into(),
                 items: vec![MenuItem::action("Paste", ui::Paste)],
             },
         ]);
-        ui::open_window(launch, cx);
+        #[cfg(target_os = "macos")]
+        {
+            unsafe extern "C" {
+                fn zvim_configure_window_menu();
+            }
+            // SAFETY: AppKit has created the menu and this is its main thread.
+            unsafe {
+                zvim_configure_window_menu();
+            }
+        }
+        if let Some(launch) = launch {
+            ui::open_window(launch, cx);
+        }
     });
+    drop(server);
+    Ok(())
 }
 
-/// Launch a separate GUI process without tying its lifetime to the terminal.
-fn detach(args: &[std::ffi::OsString]) -> anyhow::Result<()> {
+/// Start the application host without tying its lifetime to a shell.
+fn detach() -> anyhow::Result<std::process::Child> {
     use std::process::{Command, Stdio};
     zvim::session::bundled_neovim()?;
     let dir = zvim::settings::data_dir();
@@ -151,8 +227,7 @@ fn detach(args: &[std::ffi::OsString]) -> anyhow::Result<()> {
         .open(dir.join("launcher.log"))?;
     let mut command = Command::new(std::env::current_exe()?);
     command
-        .arg("--zvim-gui")
-        .args(args)
+        .arg("--zvim-host")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(log);
@@ -161,6 +236,21 @@ fn detach(args: &[std::ffi::OsString]) -> anyhow::Result<()> {
         use std::os::unix::process::CommandExt;
         command.process_group(0);
     }
-    command.spawn()?;
-    Ok(())
+    Ok(command.spawn()?)
+}
+
+fn cycle_window(backwards: bool, cx: &mut App) {
+    let windows = cx.windows();
+    if windows.len() < 2 {
+        return;
+    }
+    let Some(current) = cx
+        .active_window()
+        .and_then(|active| windows.iter().position(|w| *w == active))
+    else {
+        return;
+    };
+    let offset = if backwards { windows.len() - 1 } else { 1 };
+    let next = windows[(current + offset) % windows.len()];
+    let _ = next.update(cx, |_, window, _| window.activate_window());
 }

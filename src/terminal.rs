@@ -7,11 +7,16 @@ use gpui::{
     Task, Window, canvas, div,
 };
 
+use gpui::{prelude::*, *};
 use gpui_libghostty::__private::{KeyAction, Modifiers, MouseButton, MouseState, NativeSurface};
 use gpui_libghostty::TerminalOptions;
+use std::ops::Range;
+actions!(terminal_search, [Find, NextMatch, PreviousMatch]);
 /// A GPUI entity backed by Ghostty's native Metal or Wayland/OpenGL surface.
 pub struct Terminal {
     surface: NativeSurface,
+    search: Option<crate::terminal_search::Search>,
+    search_focus: FocusHandle,
     applied_theme: Option<std::sync::Arc<str>>,
     modal_snapshot: Option<std::sync::Arc<gpui::RenderImage>>,
     focus: FocusHandle,
@@ -65,6 +70,8 @@ impl Terminal {
             ];
             let mut terminal = Self {
                 surface,
+                search: None,
+                search_focus: cx.focus_handle(),
                 applied_theme: None,
                 modal_snapshot: None,
                 focus,
@@ -129,7 +136,7 @@ impl Terminal {
     }
 
     pub fn is_focused(&self, window: &Window) -> bool {
-        self.focus.is_focused(window)
+        self.focus.is_focused(window) || self.search_focus.is_focused(window)
     }
 
     pub fn paste(&mut self) {
@@ -169,6 +176,19 @@ impl Terminal {
     fn tick(&mut self, cx: &mut Context<Self>) {
         self.surface.tick();
         self.service_clipboard(cx);
+        if let Some(search) = &mut self.search {
+            let status = self.surface.search_status();
+            if search.select_first && status.0 >= 0 {
+                search.select_first = false;
+                if status.0 > 0 && status.1 < 0 {
+                    self.surface.binding_action("navigate_search:next");
+                }
+            }
+            if search.status != status {
+                search.status = status;
+                cx.notify();
+            }
+        }
         if !self.exit_reported && !self.is_alive() {
             self.exit_reported = true;
             cx.emit(TerminalExited);
@@ -290,15 +310,27 @@ impl Render for Terminal {
         self.sync_focus(window);
         self.start_ticking(cx);
         let terminal = cx.entity().downgrade();
+        let search_height = if self.search.is_some() { 28. } else { 0. };
         let mut element = div()
             .relative()
             .key_context("Terminal")
             .track_focus(&self.focus)
             .size_full()
             .min_h_0()
+            .on_action(
+                cx.listener(|terminal, _: &Find, window, cx| terminal.open_search(window, cx)),
+            )
+            .on_action(cx.listener(|terminal, _: &NextMatch, _, _| {
+                terminal.surface.binding_action("navigate_search:next");
+            }))
+            .on_action(cx.listener(|terminal, _: &PreviousMatch, _, _| {
+                terminal.surface.binding_action("navigate_search:previous");
+            }))
             .child(
                 canvas(
-                    move |bounds, window, cx| {
+                    move |mut bounds: Bounds<Pixels>, window, cx| {
+                        bounds.origin.y += px(search_height);
+                        bounds.size.height = (bounds.size.height - px(search_height)).max(px(0.));
                         let scale_factor = f64::from(window.scale_factor());
                         let _ = terminal.update(cx, |terminal, _| {
                             terminal.update_frame(bounds, scale_factor);
@@ -309,17 +341,27 @@ impl Render for Terminal {
                 .absolute()
                 .size_full(),
             )
-            .on_key_down(cx.listener(|terminal, event, _, cx| {
+            .on_key_down(cx.listener(|terminal, event, window, cx| {
+                if terminal.search_focus.is_focused(window) {
+                    terminal.search_key(event, window, cx);
+                    return;
+                }
                 terminal.key_down(event);
                 cx.stop_propagation();
             }))
-            .on_key_up(cx.listener(|terminal, event, _, cx| {
+            .on_key_up(cx.listener(|terminal, event, window, cx| {
+                if terminal.search_focus.is_focused(window) {
+                    return;
+                }
                 terminal.key_up(event);
                 cx.stop_propagation();
             }))
             .on_mouse_move(cx.listener(|terminal, event: &MouseMoveEvent, _, _| {
                 terminal.mouse_position(event.position, event.modifiers);
             }));
+        if self.search.is_some() {
+            element = element.child(self.search_bar(cx));
+        }
         if let Some(snapshot) = &self.modal_snapshot {
             element = element.child(gpui::img(snapshot.clone()).absolute().size_full());
         }
@@ -391,5 +433,311 @@ pub fn configure_resources() {
         unsafe {
             std::env::set_var("GHOSTTY_RESOURCES_DIR", path);
         }
+    }
+}
+
+impl Terminal {
+    pub(crate) fn search_status(&self) -> Option<(isize, isize)> {
+        self.search.as_ref().map(|s| s.status)
+    }
+    fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let search = self.search.get_or_insert_with(Default::default);
+        search.selection = 0..search.len();
+        self.search_focus.focus(window);
+        self.surface.set_focus(false);
+        cx.notify();
+    }
+    fn update_search(&mut self, cx: &mut Context<Self>) {
+        if let Some(search) = &mut self.search {
+            search.status = (-1, -1);
+            search.select_first = true;
+            self.surface
+                .binding_action(&format!("search:{}", search.text));
+        }
+        cx.notify();
+    }
+    fn close_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.surface.binding_action("end_search");
+        self.search = None;
+        self.focus.focus(window);
+        cx.notify();
+    }
+    fn search_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let key = &event.keystroke;
+        if key.key == "escape" {
+            self.close_search(window, cx);
+        } else if key.key == "enter" {
+            self.surface.binding_action(if key.modifiers.shift {
+                "navigate_search:previous"
+            } else {
+                "navigate_search:next"
+            });
+        } else if let Some(search) = &mut self.search {
+            if (key.modifiers.platform || key.modifiers.control) && key.key == "a" {
+                search.selection = 0..search.len();
+            } else if (key.modifiers.platform || key.modifiers.control) && key.key == "v" {
+                if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+                    search.replace(None, &text.replace(['\n', '\r'], ""));
+                }
+                self.update_search(cx);
+            } else if (key.modifiers.platform || key.modifiers.control) && key.key == "c" {
+                cx.write_to_clipboard(ClipboardItem::new_string(
+                    search.slice(search.selection.clone()),
+                ));
+            } else if (key.modifiers.platform || key.modifiers.control) && key.key == "x" {
+                cx.write_to_clipboard(ClipboardItem::new_string(
+                    search.slice(search.selection.clone()),
+                ));
+                search.replace(None, "");
+                self.update_search(cx);
+            } else if key.key == "delete" {
+                search.delete();
+                self.update_search(cx);
+            } else if key.key == "backspace" {
+                search.backspace();
+                self.update_search(cx);
+            } else if key.key == "left" || key.key == "right" {
+                search.move_cursor(key.key == "right");
+            } else if key.key == "home" {
+                search.selection = 0..0;
+            } else if key.key == "end" {
+                let end = search.len();
+                search.selection = end..end;
+            } else {
+                return;
+            }
+        }
+        cx.stop_propagation();
+        cx.notify();
+    }
+    fn search_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let search = self.search.as_ref().unwrap();
+        let text = search.text.clone();
+        let match_status = self.search_status().unwrap();
+        let status = if text.is_empty() {
+            "".to_owned()
+        } else if match_status.0 < 0 {
+            "Searching…".into()
+        } else if match_status.0 == 0 {
+            "No matches".into()
+        } else {
+            format!("{} / {}", (match_status.1 + 1).max(0), match_status.0)
+        };
+        let selection = search.selection.clone();
+        let before = search.slice(0..selection.start);
+        let selected = search.slice(selection.clone());
+        let after = search.slice(selection.end..search.len());
+        let focus = self.search_focus.clone();
+        let entity = cx.entity();
+        let input_entity = entity.clone();
+        div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .w_full()
+            .h(px(28.))
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .px(px(8.))
+            .bg(rgb(0x25252b))
+            .text_color(rgb(0xeeeeee))
+            .text_size(px(12.))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(|terminal, _, window, cx| {
+                    terminal.search_focus.focus(window);
+                    cx.stop_propagation();
+                }),
+            )
+            .on_mouse_up(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+            .on_mouse_move(|event, _, cx| {
+                if event.pressed_button.is_some() {
+                    cx.stop_propagation();
+                }
+            })
+            .child(
+                div()
+                    .id("terminal-search-input")
+                    .track_focus(&self.search_focus)
+                    .key_context("TerminalSearch")
+                    .on_mouse_down(
+                        gpui::MouseButton::Left,
+                        cx.listener(|terminal, event: &MouseDownEvent, window, cx| {
+                            terminal.search_focus.focus(window);
+                            if let Some(search) = &mut terminal.search {
+                                let font = window.text_style().font();
+                                let run = TextRun {
+                                    len: search.text.len(),
+                                    font,
+                                    color: rgb(0xeeeeee).into(),
+                                    background_color: None,
+                                    underline: None,
+                                    strikethrough: None,
+                                };
+                                let line = window.text_system().shape_line(
+                                    search.text.clone().into(),
+                                    px(12.),
+                                    &[run],
+                                    None,
+                                );
+                                let byte = line
+                                    .closest_index_for_x(event.position.x - search.bounds.origin.x);
+                                let units = search.text[..byte].encode_utf16().count();
+                                search.selection = units..units;
+                            }
+                            cx.stop_propagation();
+                            cx.notify();
+                        }),
+                    )
+                    .relative()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .flex()
+                    .items_center()
+                    .h_full()
+                    .child(if text.is_empty() {
+                        "Find in terminal…".to_owned()
+                    } else {
+                        before
+                    })
+                    .child(div().bg(rgb(0x465575)).child(selected))
+                    .child(div().w(px(1.)).h(px(14.)).bg(rgb(0xffffff)))
+                    .child(after)
+                    .child(
+                        canvas(
+                            move |bounds, _, cx| {
+                                entity.update(cx, |t, _| {
+                                    if let Some(s) = &mut t.search {
+                                        s.bounds = bounds;
+                                    }
+                                });
+                                bounds
+                            },
+                            move |bounds, _, window, cx| {
+                                window.handle_input(
+                                    &focus,
+                                    ElementInputHandler::new(bounds, input_entity.clone()),
+                                    cx,
+                                );
+                            },
+                        )
+                        .absolute()
+                        .size_full(),
+                    ),
+            )
+            .child(status)
+            .child(
+                div()
+                    .id("search-previous")
+                    .cursor_pointer()
+                    .px(px(4.))
+                    .child("↑")
+                    .on_click(cx.listener(|t, _, _, _| {
+                        t.surface.binding_action("navigate_search:previous");
+                    })),
+            )
+            .child(
+                div()
+                    .id("search-next")
+                    .cursor_pointer()
+                    .px(px(4.))
+                    .child("↓")
+                    .on_click(cx.listener(|t, _, _, _| {
+                        t.surface.binding_action("navigate_search:next");
+                    })),
+            )
+            .child(
+                div()
+                    .id("search-close")
+                    .cursor_pointer()
+                    .px(px(4.))
+                    .child("×")
+                    .on_click(cx.listener(|t, _, w, cx| t.close_search(w, cx))),
+            )
+    }
+}
+
+impl EntityInputHandler for Terminal {
+    fn text_for_range(
+        &mut self,
+        range: Range<usize>,
+        actual: &mut Option<Range<usize>>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<String> {
+        let search = self.search.as_ref()?;
+        let range = range.start.min(search.len())..range.end.min(search.len());
+        *actual = Some(range.clone());
+        Some(search.slice(range))
+    }
+    fn selected_text_range(
+        &mut self,
+        _: bool,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<UTF16Selection> {
+        Some(UTF16Selection {
+            range: self.search.as_ref()?.selection.clone(),
+            reversed: false,
+        })
+    }
+    fn marked_text_range(&self, _: &mut Window, _: &mut Context<Self>) -> Option<Range<usize>> {
+        self.search.as_ref()?.marked.clone()
+    }
+    fn unmark_text(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(s) = &mut self.search {
+            s.marked = None;
+        }
+        cx.notify();
+    }
+    fn replace_text_in_range(
+        &mut self,
+        range: Option<Range<usize>>,
+        text: &str,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(s) = &mut self.search {
+            s.replace(range, &text.replace(['\n', '\r'], ""));
+        }
+        self.update_search(cx);
+    }
+    fn replace_and_mark_text_in_range(
+        &mut self,
+        range: Option<Range<usize>>,
+        text: &str,
+        selected: Option<Range<usize>>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(s) = &mut self.search {
+            let start = s.replace(range, text);
+            let end = start + text.encode_utf16().count();
+            s.marked = Some(start..end);
+            s.selection = selected
+                .map(|r| (start + r.start).min(end)..(start + r.end).min(end))
+                .unwrap_or(end..end);
+        }
+        self.update_search(cx);
+    }
+    fn bounds_for_range(
+        &mut self,
+        _: Range<usize>,
+        _: Bounds<Pixels>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<Bounds<Pixels>> {
+        Some(self.search.as_ref()?.bounds)
+    }
+    fn character_index_for_point(
+        &mut self,
+        _: Point<Pixels>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<usize> {
+        Some(self.search.as_ref()?.selection.end)
     }
 }

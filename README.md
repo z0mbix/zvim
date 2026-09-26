@@ -24,6 +24,10 @@ python3 scripts/package.py
 open dist/zvim-macos-arm64/Zvim.app
 ```
 
+For local macOS testing, quit Zvim and run `just install-dev`. This builds a fresh
+release package, replaces `/Applications/Zvim.app`, and removes its quarantine
+attribute. Then launch it with `open /Applications/Zvim.app`.
+
 On an Intel Mac the directory is `dist/zvim-macos-x86_64`. The `.app` is signed ad hoc for local use; it is not notarised for public distribution. Signing identities and notarisation credentials are deliberately not part of the repository.
 
 ## Command-line launcher
@@ -52,7 +56,7 @@ zvim --clean .
 zvim --wait .
 ```
 
-Each launcher invocation opens a new application instance and returns immediately. `--wait` keeps it attached until the application exits. Shell environment variables are inherited. If the first file operand is an existing directory, it sets Neovim's working directory **before configuration loads**. All remaining relative paths, including `-u` and `-S` values, resolve relative to that directory. Otherwise the shell's working directory is retained. Neovim configuration supplies project navigation.
+Each launch opens a new window in one shared application process, giving Zvim a single Dock icon. The installed launcher returns once the window is accepted; `--wait` stays attached until that specific window closes. Each window owns an independent Neovim process and inherits its caller’s environment. Terminal shells inherit the running application’s environment. If the first file operand is an existing directory, it sets Neovim's working directory **before configuration loads**. All remaining relative paths, including `-u` and `-S` values, resolve relative to that directory. Otherwise the shell's working directory is retained. Neovim configuration supplies project navigation.
 
 GUI-compatible Neovim options are forwarded in their original order, including split/tab counts, readonly/diff modes, `-u`, `-S`, `--cmd`, `-c`, `+command`, and `--listen`. Use `--` before filenames beginning with `-` or `+`. `--help` and `--version` print in the terminal. Headless, Ex/batch, standalone Lua, remote-client, and stdin-input modes conflict with the embedded GUI connection and produce an error; use Neovim directly for those. Detached startup errors are recorded in `launcher.log` in Zvim's configuration directory.
 
@@ -64,11 +68,12 @@ Open **Zvim → Settings…** (`⌘,` on macOS; `Ctrl+Shift+,` elsewhere). Gener
 
 - **Appearance: System / Light / Dark** styles Zvim controls. System responds to desktop appearance changes; native titlebars continue to follow the OS.
 - **Sync editor appearance**, off by default, also sets Neovim's `background` option. Your colourscheme must support both appearances. NvChad/Base46 palettes are preserved unchanged because changing `background` resets their custom highlights; Zvim does not choose a replacement theme. Disabling sync restores the background from before sync was enabled unless you changed it yourself in Neovim. No configuration files are edited.
+- **Focus follows mouse**, off by default, focuses editor or terminal content when the pointer moves into it. Tab controls, dividers, selection drags and close dialogs do not switch focus. Keyboard focus stays put until the pointer moves again. This affects Zvim panes, not Neovim’s internal splits.
 - **Remember window size and position**, on by default, reuses the last saved editor-window placement. Moves and resizes are saved after a brief pause, as well as on normal close; fullscreen preserves the previous windowed placement. Turning it off opens new windows centred at the default size and stops saving geometry. This does not restore files, sessions, or multiple window layouts.
 - **Application icon** previews the bundled Neovim mark. The saved `app_icon` ID is `neovim`; this release has one choice. Unknown IDs fall back to it without losing other settings. Additional artwork and platform switching can be added later. The macOS bundle embeds the icon for Finder, the Dock and the app switcher.
 - **Open diagnostics folder** reveals the directory containing settings and startup/editor logs.
 
-Preferences live in `preferences.json`, separate from `window.json`. On macOS, both are in `~/Library/Application Support/dev.zvim.Zvim/`, shared by `just run` and packaged app launches. Changes apply to open windows in the same instance; independently launched instances reload preferences when activated. Font and plugin settings remain in Neovim.
+Preferences live in `preferences.json`, separate from `window.json`. On macOS, both are in `~/Library/Application Support/dev.zvim.Zvim/`, shared by `just run` and packaged app launches. Changes apply to all open windows in the shared application. Font and plugin settings remain in Neovim.
 
 ## Behaviour
 
@@ -112,7 +117,11 @@ From Neovim, `:ZvimTerminal` still toggles visibility. Drag the divider to resiz
 
 Under **Settings → Keybindings**, record replacements for show/hide, focus, zoom, new/close/previous/next tab, split right/down and focus pane left/right. Escape cancels recording; **Reset shortcuts** restores these defaults. Changes save automatically and apply immediately. Old default backtick shortcuts migrate to the new defaults; customised shortcuts are preserved. There is no runtime dependency on Zed or automatic rewriting of its keymap.
 
-The pane uses Ghostty's native Metal renderer on macOS and OpenGL renderer on Linux/Wayland. It loads your Ghostty configuration for fonts and keybindings. Terminal colours follow Neovim live by default, including NvChad/Base46 themes; disable **Follow Neovim terminal colours** under Settings → General to opt out. Zvim's editor font remains controlled by Neovim. Ghostty application actions such as opening tabs/windows and settings are not implemented by this embedder. The terminal provides multiple panes and shell tabs in one resizable bottom dock, with no search UI or session restoration. Built-in `:terminal` and existing terminal plugins retain Neovim's behaviour.
+The pane uses Ghostty's native Metal renderer on macOS and OpenGL renderer on Linux/Wayland. It loads your Ghostty configuration for fonts and keybindings. Terminal colours follow Neovim live by default, including NvChad/Base46 themes; disable **Follow Neovim terminal colours** under Settings → General to opt out. Zvim's editor font remains controlled by Neovim. Ghostty application actions such as opening tabs/windows and settings are not implemented by this embedder. The terminal provides multiple panes and shell tabs in one resizable bottom dock, with native scrollback search and no session restoration. Built-in `:terminal` and existing terminal plugins retain Neovim's behaviour.
+
+Terminal search opens with **Cmd+F** on macOS (**Ctrl+Shift+F** on Linux). Type to search scrollback; **Enter / Shift+Enter** and the arrow buttons move through matches, and **Escape** closes the search bar. **Cmd+G / Cmd+Shift+G** also navigate matches (Linux: **Ctrl+Shift+G / Ctrl+Alt+G**). Each terminal tab keeps its own search.
+
+On macOS, the **Window** menu lists open windows with the current one checked. **Minimise** (Cmd+M), **Bring All to Front**, and selecting a listed window use native macOS behaviour. Cmd+` / Cmd+Shift+` cycle windows.
 
 Copy/paste use Ghostty bindings (normally Command-C/V on macOS, Ctrl-Shift-C/V on Linux). Terminal → Close Terminal Tab asks before ending a running command. Exiting a shell automatically closes its tab. Closing the last tab in a split removes that split and expands its neighbour; closing the final terminal hides the dock. Window close and Quit check all terminal tabs across every split, including hidden ones, before closing Neovim; Cancel preserves the editor and shell. Idle prompts detected by Ghostty close quietly. If Neovim is quit directly, **Keep Terminal** expands the remaining session to fill the window.
 
@@ -165,3 +174,5 @@ The macOS bundle version is derived from Cargo's version. Public signing and
 notarisation are not configured.
 
 For an optimised development launch, use `just run-release`. See [performance measurements and reproduction](docs/PERFORMANCE.md) for the rendering/cache benchmarks.
+
+Zvim uses the same running application for CLI, direct executable, and `just run` launches. Quit the existing app before trying a rebuilt binary or an updated app. Older releases without launch handoff must be closed once when switching to this version. The app currently exits after its last window closes. See [application instance handling](docs/INSTANCES.md).

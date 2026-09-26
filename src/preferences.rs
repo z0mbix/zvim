@@ -37,6 +37,42 @@ fn terminal_bindings(preferences: &Preferences) -> Vec<KeyBinding> {
         KeyBinding::new("cmd-shift-/", HideTerminal, Some("Terminal")),
         KeyBinding::new("ctrl-j", FocusTerminal, Some("Zvim && Normal")),
     ];
+    if cfg!(target_os = "macos") {
+        bindings.push(KeyBinding::new("cmd-m", MinimizeWindow, None));
+        bindings.push(KeyBinding::new("cmd-`", NextWindow, None));
+        for key in ["cmd-shift-`", "cmd-~", "cmd-shift-~"] {
+            bindings.push(KeyBinding::new(key, PreviousWindow, None));
+        }
+    }
+    bindings.extend([
+        KeyBinding::new(
+            if cfg!(target_os = "macos") {
+                "cmd-f"
+            } else {
+                "ctrl-shift-f"
+            },
+            crate::terminal::Find,
+            Some("Terminal"),
+        ),
+        KeyBinding::new(
+            if cfg!(target_os = "macos") {
+                "cmd-g"
+            } else {
+                "ctrl-shift-g"
+            },
+            crate::terminal::NextMatch,
+            Some("Terminal"),
+        ),
+        KeyBinding::new(
+            if cfg!(target_os = "macos") {
+                "cmd-shift-g"
+            } else {
+                "ctrl-alt-g"
+            },
+            crate::terminal::PreviousMatch,
+            Some("Terminal"),
+        ),
+    ]);
     for shortcut in TerminalShortcut::ALL {
         let context = match shortcut {
             TerminalShortcut::New
@@ -124,6 +160,7 @@ fn canonical_shortcut(value: &str) -> anyhow::Result<String> {
         "{" => Some("["),
         "}" => Some("]"),
         "?" => Some("/"),
+        "~" => Some("`"),
         _ => None,
     } {
         key.key = base.into();
@@ -182,6 +219,18 @@ fn validate_shortcuts(p: &Preferences) -> anyhow::Result<()> {
             "cmd-8",
             "cmd-9",
         ];
+        if cfg!(target_os = "macos") {
+            reserved.extend([
+                "cmd-`",
+                "cmd-shift-`",
+                "cmd-m",
+                "cmd-f",
+                "cmd-g",
+                "cmd-shift-g",
+            ]);
+        } else {
+            reserved.extend(["ctrl-shift-f", "ctrl-shift-g", "ctrl-alt-g"]);
+        }
         if shortcut != TerminalShortcut::New {
             reserved.push("cmd-n");
         }
@@ -234,7 +283,7 @@ enum SettingsTab {
     Keybindings,
 }
 
-const GENERAL_TAB_BUTTON: usize = 11 + APP_ICONS.len() + TerminalShortcut::ALL.len();
+const GENERAL_TAB_BUTTON: usize = 12 + APP_ICONS.len() + TerminalShortcut::ALL.len();
 const KEYBINDINGS_TAB_BUTTON: usize = GENERAL_TAB_BUTTON + 1;
 
 #[derive(Clone, Copy)]
@@ -242,6 +291,7 @@ enum Choice {
     Tab(SettingsTab),
     Theme(Theme),
     Geometry,
+    FocusFollowsMouse,
     Sync,
     TerminalTheme,
     Diagnostics,
@@ -413,6 +463,7 @@ impl PreferencesView {
                 Choice::Tab(_) | Choice::RecordShortcut(_) => unreachable!(),
                 Choice::Theme(theme) => p.theme = theme,
                 Choice::Icon(id) => p.app_icon = id.into(),
+                Choice::FocusFollowsMouse => p.focus_follows_mouse = !p.focus_follows_mouse,
                 Choice::Geometry => p.remember_window_geometry = !p.remember_window_geometry,
                 Choice::TerminalTheme => p.terminal_follow_neovim = !p.terminal_follow_neovim,
                 Choice::Sync => p.sync_editor_appearance = !p.sync_editor_appearance,
@@ -640,26 +691,31 @@ impl Render for PreferencesView {
                     .child(self.toggle(5,p.terminal_follow_neovim,Choice::TerminalTheme,d,cx)))
                 .child(div().text_color(muted).child("When enabled, terminal colours follow Neovim live. When disabled, your Ghostty theme is used. Pane shortcuts are in the Keybindings tab.")))
             .child(div().flex().flex_col().gap_2()
+                .child(div().flex().items_center().justify_between().gap_4()
+                    .child(div().font_weight(FontWeight::SEMIBOLD).child("Focus follows mouse"))
+                    .child(self.toggle(6,p.focus_follows_mouse,Choice::FocusFollowsMouse,d,cx)))
+                .child(div().text_color(muted).child("Move the pointer into editor or terminal content to focus that pane. Selection, resizing and dialogs keep their focus.")))
+            .child(div().flex().flex_col().gap_2()
                 .child(div().font_weight(FontWeight::SEMIBOLD).child("Application icon"))
                 .child(div().flex().items_center().gap_4()
                     .child(img(self.icon_images[resolve(&p.app_icon).id].clone())
                         .w(px(40.)).h(px(40.)))
                     .children(APP_ICONS.iter().enumerate().map(|(i, icon)|
-                        self.button(6+i, icon.label, resolve(&p.app_icon).id == icon.id, Choice::Icon(icon.id), d, cx))))
+                        self.button(7+i, icon.label, resolve(&p.app_icon).id == icon.id, Choice::Icon(icon.id), d, cx))))
                 .child(div().text_color(muted).child("The Neovim icon is included in this build. More icon choices can be added in future releases.")))
             .child(div().flex().flex_col().gap_2()
                 .child(div().font_weight(FontWeight::SEMIBOLD).child("Command-line launcher"))
                 .child(div().text_color(muted).child("Install the zvim command for this app. No Python or additional tools are needed."))
                 .child(div().child(format!("Bin directory: {}", p.cli_bin_directory.display())))
                 .child(div().flex().flex_wrap().gap_2()
-                    .child(self.button(6+APP_ICONS.len(), "Choose folder…", false, Choice::CliDirectory, d, cx))
-                    .child(self.button(7+APP_ICONS.len(), "Use default", false, Choice::CliDefault, d, cx))
-                    .child(self.button(8+APP_ICONS.len(), if self.cli_installing {"Installing…"} else {"Install / update zvim"}, false, Choice::CliInstall, d, cx)))
+                    .child(self.button(7+APP_ICONS.len(), "Choose folder…", false, Choice::CliDirectory, d, cx))
+                    .child(self.button(8+APP_ICONS.len(), "Use default", false, Choice::CliDefault, d, cx))
+                    .child(self.button(9+APP_ICONS.len(), if self.cli_installing {"Installing…"} else {"Install / update zvim"}, false, Choice::CliInstall, d, cx)))
                 .child(div().text_color(muted).child("Choose a writable folder on your shell’s PATH. The default is ~/.local/bin; it will be created if needed. If you move the app, install the command again. Changing folders leaves any previous launcher in place."))
                 .when_some(self.cli_message.clone(), |d, message| d.child(div().child(message))))
             .child(div().flex().flex_col().gap_2()
                 .child(div().font_weight(FontWeight::SEMIBOLD).child("Troubleshooting"))
-                .child(div().flex().child(self.button(9+APP_ICONS.len(),"Open diagnostics folder",false,Choice::Diagnostics,d,cx))))
+                .child(div().flex().child(self.button(10+APP_ICONS.len(),"Open diagnostics folder",false,Choice::Diagnostics,d,cx))))
                 ))
                 .when(self.tab == SettingsTab::Keybindings, |page| page.child(
                     div().id("keybinding-settings").size_full().overflow_y_scroll().flex().flex_col().gap_4()
@@ -668,8 +724,8 @@ impl Render for PreferencesView {
                 .children(TerminalShortcut::ALL.into_iter().enumerate().map(|(i, shortcut)|
                     div().flex().items_center().justify_between().gap_4()
                         .child(format!("{}: {}", shortcut.label(), shortcut.key(&p)))
-                        .child(self.button(10+APP_ICONS.len()+i, if self.recording_shortcut == Some(shortcut) {"Press shortcut…"} else {"Change"}, false, Choice::RecordShortcut(shortcut), d, cx))))
-                .child(div().flex().child(self.button(10+APP_ICONS.len()+TerminalShortcut::ALL.len(), "Reset shortcuts", false, Choice::ResetShortcuts, d, cx)))
+                        .child(self.button(11+APP_ICONS.len()+i, if self.recording_shortcut == Some(shortcut) {"Press shortcut…"} else {"Change"}, false, Choice::RecordShortcut(shortcut), d, cx))))
+                .child(div().flex().child(self.button(11+APP_ICONS.len()+TerminalShortcut::ALL.len(), "Reset shortcuts", false, Choice::ResetShortcuts, d, cx)))
                 .child(div().text_color(muted).child("Defaults match your Zed terminal keys. Click Change, then press a shortcut; Escape cancels. Tab, split and pane-navigation shortcuts apply while the terminal is focused. Cmd+1–9 selects a tab in the focused pane.")))
                 )))
             .child(div().text_sm().flex_shrink_0().text_color(muted).child("Changes save automatically. Fonts, plugins and editing preferences stay in your Neovim configuration."))
@@ -726,12 +782,41 @@ mod shortcut_tests {
         );
     }
     #[test]
+    #[cfg(target_os = "macos")]
+    fn window_shortcuts_work_in_editor_terminal_and_settings() {
+        use crate::ui::*;
+        let map = Keymap::new(terminal_bindings(&Preferences::default()));
+        for context in ["Zvim", "Terminal", "Settings"] {
+            assert_action(&map, "cmd-`", context, &NextWindow);
+            for key in ["cmd-shift-`", "cmd-~", "cmd-shift-~"] {
+                assert_action(&map, key, context, &PreviousWindow);
+            }
+        }
+        let mut p = Preferences::default();
+        for key in ["cmd-`", "cmd-shift-`", "cmd-~"] {
+            p.terminal_toggle_key = key.into();
+            assert!(validate_shortcuts(&p).is_err());
+        }
+    }
+    #[test]
     fn zed_bindings_respect_terminal_and_editor_contexts() {
         use crate::ui::*;
         let map = Keymap::new(terminal_bindings(&Preferences::default()));
         for key in ["cmd-shift-,", "cmd-<", "cmd-shift-<"] {
             assert_action(&map, key, "Terminal", &FocusTerminal);
             assert_action(&map, key, "Zvim", &FocusTerminal);
+        }
+        if cfg!(target_os = "macos") {
+            for context in ["Terminal", "Terminal TerminalSearch"] {
+                assert_action(&map, "cmd-f", context, &crate::terminal::Find);
+                assert_action(&map, "cmd-g", context, &crate::terminal::NextMatch);
+                assert_action(
+                    &map,
+                    "cmd-shift-g",
+                    context,
+                    &crate::terminal::PreviousMatch,
+                );
+            }
         }
         assert_action(&map, "cmd->", "Terminal", &ToggleTerminal);
         assert_action(&map, "cmd-shift-enter", "Terminal", &MaximizeTerminal);

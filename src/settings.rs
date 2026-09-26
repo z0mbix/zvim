@@ -65,6 +65,7 @@ impl Theme {
 #[serde(default)]
 pub struct Preferences {
     pub remember_window_geometry: bool,
+    pub focus_follows_mouse: bool,
     pub theme: Theme,
     pub sync_editor_appearance: bool,
     pub terminal_follow_neovim: bool,
@@ -88,6 +89,7 @@ impl Default for Preferences {
     fn default() -> Self {
         Self {
             remember_window_geometry: true,
+            focus_follows_mouse: false,
             theme: Theme::System,
             sync_editor_appearance: false,
             terminal_follow_neovim: true,
@@ -259,6 +261,7 @@ mod tests {
         assert_eq!(p.app_icon, crate::icons::DEFAULT_ICON_ID);
         assert!(!p.sync_editor_appearance);
         assert!(p.terminal_follow_neovim);
+        assert!(!p.focus_follows_mouse);
         assert_eq!(p.terminal_toggle_key, "cmd-shift-.");
         assert_eq!(p.terminal_maximize_key, "cmd-shift-enter");
         assert_eq!(
@@ -294,6 +297,7 @@ mod tests {
         let p = Preferences {
             theme: Theme::Light,
             remember_window_geometry: false,
+            focus_follows_mouse: true,
             sync_editor_appearance: true,
             terminal_follow_neovim: false,
             terminal_toggle_key: "alt-t".into(),

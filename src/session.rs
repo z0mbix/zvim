@@ -83,6 +83,7 @@ pub struct Session {
     pub events: async_channel::Receiver<Event>,
     frame: Arc<Mutex<Option<Grid>>>,
     input: mpsc::Sender<String>,
+    resize: crate::latest_request::LatestRequest<(usize, usize)>,
     child: Arc<Mutex<Child>>,
 }
 #[derive(Clone, Default)]
@@ -93,6 +94,18 @@ pub struct Launch {
     pub working_directory: Option<PathBuf>,
     /// Optional isolated state root for tests and diagnostics.
     pub state_directory: Option<PathBuf>,
+    pub environment: Option<Vec<(std::ffi::OsString, std::ffi::OsString)>>,
+}
+impl Launch {
+    fn env(&self, name: &str) -> Option<std::ffi::OsString> {
+        match &self.environment {
+            Some(values) => values
+                .iter()
+                .find(|(key, _)| key == name)
+                .map(|(_, value)| value.clone()),
+            None => std::env::var_os(name),
+        }
+    }
 }
 pub fn bundled_neovim() -> Result<PathBuf> {
     let exe = std::env::current_exe()?;
@@ -121,10 +134,10 @@ pub fn bundled_neovim() -> Result<PathBuf> {
     )
 }
 /// Desktop launches often omit package-manager paths. Preserve existing entries and append common locations.
-fn editor_path() -> Result<std::ffi::OsString> {
+fn editor_path(launch: &Launch) -> Result<std::ffi::OsString> {
     #[allow(unused_mut)]
     let mut paths =
-        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).collect::<Vec<_>>();
+        std::env::split_paths(&launch.env("PATH").unwrap_or_default()).collect::<Vec<_>>();
     #[cfg(unix)]
     {
         let mut extra = vec![
@@ -133,7 +146,7 @@ fn editor_path() -> Result<std::ffi::OsString> {
             PathBuf::from("/usr/bin"),
             PathBuf::from("/bin"),
         ];
-        if let Some(home) = std::env::var_os("HOME") {
+        if let Some(home) = launch.env("HOME") {
             extra.push(PathBuf::from(home).join(".local/bin"));
         }
         for p in extra {
@@ -149,6 +162,9 @@ impl Session {
         let exe = bundled_neovim()?;
         let root = exe.parent().unwrap().parent().unwrap();
         let mut cmd = Command::new(&exe);
+        if let Some(environment) = &launch.environment {
+            cmd.env_clear().envs(environment.iter().cloned());
+        }
         cmd.arg("--embed")
             .arg("--cmd")
             .arg("let g:zvim = v:true")
@@ -162,7 +178,7 @@ impl Session {
             cmd.arg("--").args(&launch.files);
         }
         cmd.env("VIMRUNTIME", root.join("share/nvim/runtime"))
-            .env("PATH", editor_path()?)
+            .env("PATH", editor_path(launch)?)
             .env("ZVIM", "1");
         if let Some(state) = &launch.state_directory {
             for (var, child) in [
@@ -386,6 +402,7 @@ impl Session {
         });
         let (input_tx, input_rx) = mpsc::channel::<String>();
         let input_rpc = rpc.clone();
+        let resize_events = events_tx.clone();
         std::thread::spawn(move || {
             for keys in input_rx {
                 let mut remaining = keys.as_str();
@@ -412,7 +429,23 @@ impl Session {
                 }
             }
         });
+        let resize_rpc = rpc.clone();
+        let resize =
+            crate::latest_request::LatestRequest::new(
+                move |(w, h): (usize, usize)| match resize_rpc.request(
+                    "nvim_ui_try_resize",
+                    vec![(w as u64).into(), (h as u64).into()],
+                ) {
+                    Ok(_) => true,
+                    Err(error) => {
+                        let _ = resize_events
+                            .send_blocking(Event::Error(format!("Neovim resize failed: {error}")));
+                        false
+                    }
+                },
+            );
         Ok(Self {
+            resize,
             rpc,
             events,
             frame,
@@ -453,10 +486,7 @@ impl Session {
         let _ = self.input.send(text.into());
     }
     pub fn resize(&self, w: usize, h: usize) {
-        self.rpc.send(
-            "nvim_ui_try_resize",
-            vec![(w as u64).into(), (h as u64).into()],
-        );
+        self.resize.submit((w, h));
     }
     pub fn paste(&self, text: String) {
         self.rpc

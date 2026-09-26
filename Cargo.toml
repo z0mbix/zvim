@@ -1,6 +1,6 @@
 [package]
 name = "zvim"
-version = "0.0.5"
+version = "0.0.6"
 edition = "2024"
 license = "Apache-2.0"
 description = "A focused GPUI frontend for Neovim"
@@ -16,6 +16,7 @@ required-features = ["gui"]
 
 [dependencies]
 anyhow = "1"
+libc = "0.2"
 tempfile = "3.27"
 rmpv = "1.3"
 serde = { version = "1", features = ["derive"] }
@@ -33,5 +34,13 @@ strip = "debuginfo"
 
 [[example]]
 name = "performance_ui"
+required-features = ["gui"]
+test = false
+
+[build-dependencies]
+cc = "1"
+
+[[example]]
+name = "desktop_features"
 required-features = ["gui"]
 test = false

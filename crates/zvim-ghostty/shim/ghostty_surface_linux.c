@@ -33,6 +33,8 @@ typedef struct zvim_ghostty_surface {
     uint32_t width;
     uint32_t height;
     _Atomic bool alive;
+    intptr_t search_total;
+    intptr_t search_selected;
 } zvim_ghostty_surface;
 
 static pthread_once_t ghostty_once = PTHREAD_ONCE_INIT;
@@ -92,6 +94,18 @@ static void runtime_wakeup(void *userdata) {
 
 static bool runtime_action(ghostty_app_t app, ghostty_target_s target, ghostty_action_s action) {
     (void)app;
+    if (target.tag == GHOSTTY_TARGET_SURFACE && target.target.surface != NULL) {
+        zvim_ghostty_surface *search = ghostty_surface_userdata(target.target.surface);
+        if (search != NULL && action.tag == GHOSTTY_ACTION_SEARCH_TOTAL) {
+            search->search_total = action.action.search_total.total;
+            return true;
+        }
+        if (search != NULL && action.tag == GHOSTTY_ACTION_SEARCH_SELECTED) {
+            search->search_selected = action.action.search_selected.selected;
+            return true;
+        }
+    }
+
     if (action.tag != GHOSTTY_ACTION_RENDER ||
         target.tag != GHOSTTY_TARGET_SURFACE ||
         target.target.surface == NULL) {
@@ -188,6 +202,8 @@ zvim_ghostty_surface *zvim_ghostty_surface_linux_new(
         return NULL;
     }
     atomic_init(&state->alive, true);
+    state->search_total = -1;
+    state->search_selected = -1;
     state->platform_userdata = platform_userdata;
     state->make_current = make_current;
     state->clear_current = clear_current;
@@ -488,4 +504,16 @@ bool zvim_ghostty_surface_linux_update_config(zvim_ghostty_surface *state, const
 
 bool zvim_ghostty_surface_linux_needs_confirm_quit(const zvim_ghostty_surface *state) {
     return state != NULL && state->surface != NULL && ghostty_surface_needs_confirm_quit(state->surface);
+}
+
+bool zvim_ghostty_surface_linux_binding_action(zvim_ghostty_surface *state, const char *action, size_t length) {
+    if (state != NULL && length >= 7 && memcmp(action, "search:", 7) == 0) {
+        state->search_total = -1;
+        state->search_selected = -1;
+    }
+    return state != NULL && ghostty_surface_binding_action(state->surface, action, length);
+}
+void zvim_ghostty_surface_linux_search_status(zvim_ghostty_surface *state, intptr_t *total, intptr_t *selected) {
+    *total = state->search_total;
+    *selected = state->search_selected;
 }
