@@ -1,13 +1,9 @@
 A focused Neovim frontend built with GPUI. This is an early development release.
 
-## New in 0.0.6
+## Fixed in 0.0.7
 
-- One application owns multiple windows, with one Dock icon. CLI launches join the running application while retaining independent Neovim processes, project directories and arguments. `--wait` waits for its own window to close.
-- Optional **Focus follows mouse** in Settings → General switches focus between editor and terminal panes without clicking. It is off by default.
-- Terminal scrollback search with **Cmd+F**, match counts, previous/next controls, **Enter / Shift+Enter**, and **Escape** to return to the terminal. **Cmd+G / Cmd+Shift+G** also navigate matches.
-- A native macOS **Window** menu lists open windows and marks the current one. **Cmd+` / Cmd+Shift+`** cycle windows; **Cmd+M** minimises. The menu also offers **Bring All to Front**.
-- Resize requests retain only the latest pending dimensions while Neovim is busy. In a benchmark with a simulated 25 ms plugin resize callback, 100 resize steps settled in 283–312 ms instead of 2.64–2.66 seconds. Lightweight callbacks retained the same throughput. These are RPC settling measurements, not GUI frame latency.
-- `just install-dev` builds and installs a development package into `/Applications` and removes its quarantine attribute after Zvim has been quit.
+- Held letter keys now repeat on macOS instead of opening the press-and-hold accent menu. This fixes navigation with `h`, `j`, `k` and `l`, including in nvim-tree.
+- Zvim disables press-and-hold accents in its own application preferences before native text input starts. System-wide keyboard preferences remain unchanged.
 
 ## Install
 

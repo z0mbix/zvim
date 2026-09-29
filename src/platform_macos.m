@@ -1,5 +1,12 @@
 #import <AppKit/AppKit.h>
 
+void zvim_configure_key_repeat(void) {
+    @autoreleasepool {
+        // Apply to this application's preferences before AppKit creates an input context.
+        [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"ApplePressAndHoldEnabled"];
+    }
+}
+
 void zvim_configure_window_menu(void) {
     NSMenu *menu = [[NSApp.mainMenu itemWithTitle:@"Window"] submenu];
     if (menu == nil) return;

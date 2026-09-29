@@ -12,6 +12,14 @@ fn main() {
     }
 }
 fn run() -> anyhow::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        unsafe extern "C" {
+            fn zvim_configure_key_repeat();
+        }
+        // SAFETY: Called on the main thread before AppKit initializes text input.
+        unsafe { zvim_configure_key_repeat() };
+    }
     terminal::configure_resources();
     zvim::startup::mark("main");
     let mut arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
