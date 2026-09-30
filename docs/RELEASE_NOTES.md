@@ -1,9 +1,9 @@
 A focused Neovim frontend built with GPUI. This is an early development release.
 
-## Fixed in 0.0.7
+## New in 0.0.8
 
-- Held letter keys now repeat on macOS instead of opening the press-and-hold accent menu. This fixes navigation with `h`, `j`, `k` and `l`, including in nvim-tree.
-- Zvim disables press-and-hold accents in its own application preferences before native text input starts. System-wide keyboard preferences remain unchanged.
+- Ctrl+J now reaches Neovim instead of opening or focusing Ghostty. Ctrl+H/J/K/L retain your Neovim split-navigation mappings unless explicitly assigned in Zvim Settings. Cmd+Shift+, remains the default terminal-focus shortcut.
+- Added `just run-clean` for testing stock Neovim without custom configuration or plugins. It uses temporary Neovim config, data, cache and state directories, removes them when the test window closes, and accepts directory/file arguments.
 
 ## Install
 

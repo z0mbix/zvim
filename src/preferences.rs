@@ -35,7 +35,6 @@ fn terminal_bindings(preferences: &Preferences) -> Vec<KeyBinding> {
         KeyBinding::new("cmd-n", NewWindow, None),
         KeyBinding::new("cmd-?", HideTerminal, Some("Terminal")),
         KeyBinding::new("cmd-shift-/", HideTerminal, Some("Terminal")),
-        KeyBinding::new("ctrl-j", FocusTerminal, Some("Zvim && Normal")),
     ];
     if cfg!(target_os = "macos") {
         bindings.push(KeyBinding::new("cmd-m", MinimizeWindow, None));
@@ -208,7 +207,6 @@ fn validate_shortcuts(p: &Preferences) -> anyhow::Result<()> {
             "ctrl-shift-,",
             "cmd-shift-w",
             "cmd-shift-/",
-            "ctrl-j",
             "cmd-1",
             "cmd-2",
             "cmd-3",
@@ -832,7 +830,20 @@ mod shortcut_tests {
         assert_action(&map, "cmd-shift-d", "Terminal", &SplitTerminalDown);
         assert_action(&map, "cmd-[", "Terminal", &TerminalPaneLeft);
         assert_action(&map, "cmd-]", "Terminal", &TerminalPaneRight);
-        assert_action(&map, "ctrl-j", "Zvim Normal", &FocusTerminal);
+        for key in ["ctrl-h", "ctrl-j", "ctrl-k", "ctrl-l"] {
+            for context in ["Zvim", "Zvim Normal", "Terminal"] {
+                let contexts = [
+                    KeyContext::parse("ZvimWindow").unwrap(),
+                    KeyContext::parse(context).unwrap(),
+                ];
+                assert!(
+                    map.bindings_for_input(&[Keystroke::parse(key).unwrap()], &contexts)
+                        .0
+                        .is_empty(),
+                    "{key} must reach Neovim/the shell in {context}"
+                );
+            }
+        }
         for (key, context) in [
             ("ctrl-j", "Terminal"),
             ("ctrl-j", "Zvim"),

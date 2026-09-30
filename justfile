@@ -15,6 +15,25 @@ run-release *args:
     python3 scripts/bundle-ghostty.py
     cargo run --release --locked -- {{args}}
 
+# Test stock Neovim in a window with disposable config and state.
+[positional-arguments]
+run-clean *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    python3 scripts/bundle-neovim.py
+    cargo build --release --locked
+    python3 scripts/bundle-ghostty.py
+    clean_root="$(mktemp -d "${TMPDIR:-/tmp}/zvim-clean.XXXXXX")"
+    trap 'rm -rf -- "$clean_root"' EXIT
+    mkdir -p "$clean_root"/{config,data,cache,state}
+    echo "Opening stock Neovim. Close the test window to finish and remove its temporary state."
+    env -u NVIM_APPNAME -u VIMINIT -u EXINIT \
+        XDG_CONFIG_HOME="$clean_root/config" \
+        XDG_DATA_HOME="$clean_root/data" \
+        XDG_CACHE_HOME="$clean_root/cache" \
+        XDG_STATE_HOME="$clean_root/state" \
+        target/release/zvim --wait --clean "$@"
+
 check:
     cargo fmt --check
     cargo test --locked --all-targets

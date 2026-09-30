@@ -80,7 +80,7 @@ Preferences live in `preferences.json`, separate from `window.json`. On macOS, b
 - `zvim [files...]` loads your normal Neovim configuration. `zvim --clean [files...]` starts without it. Use `--` before a filename beginning with `-`.
 - Each window owns one bundled editor process. `g:zvim` is true before your configuration loads; `ZVIM=1` is also available to child tools.
 - Set `vim.opt.guifont = 'Menlo:h16'` (or your installed monospace font) and `vim.opt.linespace` in your configuration. Highlight colours and cursor shapes come from Neovim.
-- On macOS: Command-O opens files, Command-V pastes, Command-W requests close (or closes the focused terminal tab), Command-N opens a window (or a terminal tab when the terminal is focused), and Command-Q requests closing all windows. Control-J focuses the terminal from Neovim normal/visual mode; other Control keys retain Neovim/terminal behaviour unless assigned in Settings. Menus also expose Open, Paste, New Window, and Close.
+- On macOS: Command-O opens files, Command-V pastes, Command-W requests close (or closes the focused terminal tab), Command-N opens a window (or a terminal tab when the terminal is focused), and Command-Q requests closing all windows. Control keys, including Ctrl+H/J/K/L for split navigation, retain Neovim/terminal behaviour unless explicitly assigned in Settings. Menus also expose Open, Paste, New Window, and Close.
 - Mouse clicking, selection, dragging, and scrolling require Neovim's `mouse` option, for example `set mouse=a`.
 - The `+` and `*` registers use the system clipboard. Neovim's own register commands provide copy/cut; Zvim does not replace Ctrl-C.
 - File → Open, Finder's Open With, and file drops open files in the current session. Opening files never forces away unsaved edits.
@@ -111,7 +111,7 @@ Defaults mirror the terminal actions in the maintainer's Zed keymap, with Zed's 
 | Hide terminal | Cmd+? | Terminal focused |
 | Close window | Cmd+Shift+W | Either pane |
 
-Option+, / Option+. also focus/toggle the terminal from Neovim normal/visual mode; Control-J moves focus down to the terminal in those modes. Returning focus to the editor keeps the terminal visible and restores the split if it was maximised. Cmd+[ / ] moves focus spatially between left/right terminal panes. Click a stacked pane or use Terminal → Focus Pane Above / Below to focus it. Tab switching and numbered selection affect only the focused pane.
+Option+, / Option+. also focus/toggle the terminal from Neovim normal/visual mode. Returning focus to the editor keeps the terminal visible and restores the split if it was maximised. Cmd+[ / ] moves focus spatially between left/right terminal panes. Click a stacked pane or use Terminal → Focus Pane Above / Below to focus it. Tab switching and numbered selection affect only the focused pane.
 
 From Neovim, `:ZvimTerminal` still toggles visibility. Drag the divider to resize; the split starts at 40% and retains its proportion while that window stays open, including after hiding or maximising.
 
@@ -174,5 +174,7 @@ The macOS bundle version is derived from Cargo's version. Public signing and
 notarisation are not configured.
 
 For an optimised development launch, use `just run-release`. See [performance measurements and reproduction](docs/PERFORMANCE.md) for the rendering/cache benchmarks.
+
+Use `just run-clean` to try stock Neovim without your custom configuration or plugins. It builds an optimised Zvim, prepares the bundled runtime, and opens a `--clean` editor with temporary Neovim config, data, cache and state directories. Close that window to finish the recipe and delete its temporary state. Your normal Neovim configuration and history are untouched; files you explicitly edit are still real files. Optional arguments work as usual, for example `just run-clean ~/Projects/example` or `just run-clean "file with spaces.txt"`. Terminal shell configuration is not reset. On macOS, Zvim GUI preferences remain shared with your normal app; on Linux, the temporary XDG config directory also isolates Zvim preferences. Quit any existing Zvim instance first if you also want to test the newly built application binary.
 
 Zvim uses the same running application for CLI, direct executable, and `just run` launches. Quit the existing app before trying a rebuilt binary or an updated app. Older releases without launch handoff must be closed once when switching to this version. The app currently exits after its last window closes. See [application instance handling](docs/INSTANCES.md).
