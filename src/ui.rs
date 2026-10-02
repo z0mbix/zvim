@@ -372,6 +372,15 @@ impl Editor {
         self.scroll_terminal_tabs();
         self.reveal_terminal(window, cx);
     }
+    fn cycle_all_terminals(&mut self, next: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if self.close_pending || self.close_requested {
+            return;
+        }
+        if self.terminals.cycle_all(next) {
+            self.scroll_terminal_tabs();
+            self.reveal_terminal(window, cx);
+        }
+    }
     fn new_terminal(&mut self, _: &NewTerminal, window: &mut Window, cx: &mut Context<Self>) {
         if self.close_pending || self.close_requested {
             return;
@@ -1850,12 +1859,12 @@ impl Render for Editor {
             .on_action(cx.listener(|v, _: &SplitTerminalDown, w, cx| {
                 v.split_terminal(Axis::Vertical, w, cx)
             }))
-            .on_action(cx.listener(|v, _: &TerminalPaneLeft, w, cx| {
-                v.navigate_terminal(Direction::Left, w, cx)
-            }))
-            .on_action(cx.listener(|v, _: &TerminalPaneRight, w, cx| {
-                v.navigate_terminal(Direction::Right, w, cx)
-            }))
+            .on_action(
+                cx.listener(|v, _: &TerminalPaneLeft, w, cx| v.cycle_all_terminals(false, w, cx)),
+            )
+            .on_action(
+                cx.listener(|v, _: &TerminalPaneRight, w, cx| v.cycle_all_terminals(true, w, cx)),
+            )
             .on_action(
                 cx.listener(|v, _: &TerminalPaneUp, w, cx| {
                     v.navigate_terminal(Direction::Up, w, cx)

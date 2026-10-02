@@ -46,6 +46,7 @@ pub struct TerminalLayout<T> {
     root: Option<Node>,
     focused: Option<u64>,
     next_id: u64,
+    next_terminal_id: u64,
 }
 
 impl<T> Default for TerminalLayout<T> {
@@ -55,6 +56,7 @@ impl<T> Default for TerminalLayout<T> {
             root: None,
             focused: None,
             next_id: 1,
+            next_terminal_id: 1,
         }
     }
 }
@@ -63,6 +65,11 @@ impl<T> TerminalLayout<T> {
     fn id(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
+        id
+    }
+    fn terminal_id(&mut self) -> u64 {
+        let id = self.next_terminal_id;
+        self.next_terminal_id += 1;
         id
     }
     pub fn focused_pane(&self) -> Option<u64> {
@@ -132,8 +139,30 @@ impl<T> TerminalLayout<T> {
             .and_then(|id| self.pane(id))
             .map_or(0, |tabs| tabs.adjacent(next))
     }
+    pub fn cycle_all(&mut self, next: bool) -> bool {
+        let Some(active) = self.active_id() else {
+            return false;
+        };
+        let mut ids: Vec<_> = self.iter().map(|(id, _)| *id).collect();
+        ids.sort_unstable();
+        let index = ids.iter().position(|id| *id == active).unwrap();
+        let target = ids[if next {
+            (index + 1) % ids.len()
+        } else {
+            (index + ids.len() - 1) % ids.len()
+        }];
+        for (pane, tabs) in &mut self.panes {
+            let index = tabs.iter().position(|(id, _)| *id == target);
+            if let Some(index) = index {
+                tabs.select(index);
+                self.focused = Some(*pane);
+                return true;
+            }
+        }
+        false
+    }
     pub fn push(&mut self, value: T) -> u64 {
-        let tab = self.id();
+        let tab = self.terminal_id();
         if self.focused.is_none() {
             let pane = self.id();
             self.root = Some(Node::Pane(pane));
@@ -150,7 +179,7 @@ impl<T> TerminalLayout<T> {
     }
     pub fn split(&mut self, pane: u64, axis: Axis, value: T) -> Option<u64> {
         self.pane(pane)?;
-        let tab = self.id();
+        let tab = self.terminal_id();
         let new_pane = self.id();
         let divider = self.id();
         let mut tabs = TerminalTabs::default();
@@ -392,6 +421,52 @@ impl Node {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cycling_reaches_hidden_tabs_and_vertical_splits_in_both_directions() {
+        let mut layout = TerminalLayout::default();
+        assert!(!layout.cycle_all(true));
+        let first = layout.push("first");
+        assert!(layout.cycle_all(false));
+        let left = layout.focused_pane().unwrap();
+        let second = layout.split(left, Axis::Horizontal, "second").unwrap();
+        let right = layout.focused_pane().unwrap();
+        let third = layout.split(right, Axis::Vertical, "third").unwrap();
+        layout.focus_pane(left);
+        let fourth = layout.push("hidden first-pane tab");
+        for id in [first, second, third, fourth, first] {
+            assert!(layout.cycle_all(true));
+            assert_eq!(layout.active_id(), Some(id));
+        }
+        for id in [fourth, third, second, first] {
+            assert!(layout.cycle_all(false));
+            assert_eq!(layout.active_id(), Some(id));
+        }
+        layout.remove(second);
+        assert!(layout.cycle_all(true));
+        assert_eq!(layout.active_id(), Some(third));
+    }
+    #[test]
+    fn terminal_numbers_ignore_panes_and_dividers_and_survive_closing() {
+        let mut layout = TerminalLayout::default();
+        assert_eq!(layout.push("first"), 1);
+        let first_pane = layout.focused_pane().unwrap();
+        assert_eq!(
+            layout.split(first_pane, Axis::Horizontal, "second"),
+            Some(2)
+        );
+        let second_pane = layout.focused_pane().unwrap();
+        assert_eq!(layout.split(second_pane, Axis::Vertical, "third"), Some(3));
+        assert_eq!(layout.push("fourth"), 4);
+        layout.remove(2);
+        assert_eq!(layout.active_id(), Some(4));
+        assert_eq!(layout.push("fifth"), 5);
+        for id in [1, 3, 4, 5] {
+            layout.remove(id);
+        }
+        assert!(layout.is_empty());
+        assert_eq!(layout.push("sixth"), 6);
+    }
+
     #[test]
     fn background_exit_preserves_focus_and_expands_nested_survivors() {
         let mut layout = TerminalLayout::default();

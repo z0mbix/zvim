@@ -1,9 +1,10 @@
 A focused Neovim frontend built with GPUI. This is an early development release.
 
-## New in 0.0.8
+## New in 0.0.9
 
-- Ctrl+J now reaches Neovim instead of opening or focusing Ghostty. Ctrl+H/J/K/L retain your Neovim split-navigation mappings unless explicitly assigned in Zvim Settings. Cmd+Shift+, remains the default terminal-focus shortcut.
-- Added `just run-clean` for testing stock Neovim without custom configuration or plugins. It uses temporary Neovim config, data, cache and state directories, removes them when the test window closes, and accepts directory/file arguments.
+- Terminal numbering now advances only when a shell is created. Split panes and dividers no longer cause skipped numbers; names remain stable when terminals close.
+- Cmd+[ and Cmd+] now cycle backwards and forwards through all terminal tabs across every split pane, in terminal-number order, wrapping at either end. Inactive tabs and vertically stacked panes are reachable. Cmd+Shift+[ / ] still cycles within the focused pane, and Cmd+1–9 still selects a tab within that pane.
+- Settings and Terminal menu labels now describe cycling across all panes.
 
 ## Install
 

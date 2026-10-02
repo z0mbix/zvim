@@ -189,8 +189,8 @@ impl TerminalShortcut {
             Self::Next => "Next terminal tab",
             Self::SplitRight => "Split terminal right",
             Self::SplitDown => "Split terminal down",
-            Self::PaneLeft => "Focus terminal pane left",
-            Self::PaneRight => "Focus terminal pane right",
+            Self::PaneLeft => "Previous terminal across all panes",
+            Self::PaneRight => "Next terminal across all panes",
         }
     }
     pub fn key(self, p: &Preferences) -> &str {
