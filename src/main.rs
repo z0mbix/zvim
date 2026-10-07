@@ -189,6 +189,8 @@ fn run() -> anyhow::Result<()> {
                     MenuItem::action("Focus Pane Below", ui::TerminalPaneDown),
                     MenuItem::action("Previous Terminal Tab", ui::PreviousTerminal),
                     MenuItem::action("Next Terminal Tab", ui::NextTerminal),
+                    MenuItem::action("Make Terminal Dock Taller", ui::GrowTerminal),
+                    MenuItem::action("Make Terminal Dock Shorter", ui::ShrinkTerminal),
                     MenuItem::action("Maximise / Restore Terminal", ui::MaximizeTerminal),
                     MenuItem::action("Close Terminal Tab…", ui::CloseTerminal),
                 ],

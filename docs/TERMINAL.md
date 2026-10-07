@@ -57,3 +57,5 @@ Enable **Settings → General → Focus follows mouse** to focus visible termina
 ### Scrollback search
 
 Cmd+F (Linux: Ctrl+Shift+F) opens a compact search bar for the focused terminal tab. Ghostty performs the search asynchronously and renders match highlights directly in its native surface. The bridge forwards search totals and selected-match events; it does not copy scrollback into GPUI. Enter/Shift+Enter and the arrow buttons navigate, Escape returns focus to the terminal. Search bars take 28 pixels above the native child so the child cannot obscure controls. Queries use the GPUI text input protocol, including UTF-16 ranges for composition. Search and match navigation shortcuts are reserved against terminal shortcut overrides.
+
+Cmd+Shift+Up makes the terminal dock 40 logical pixels taller; Cmd+Shift+Down makes it 40 pixels shorter. These shortcuts apply while a terminal is focused and the dock is visible alongside the editor. They use the same minimum sizes as mouse dragging, do nothing while maximised, and can be changed in Settings → Keybindings.

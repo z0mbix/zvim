@@ -74,7 +74,9 @@ fn terminal_bindings(preferences: &Preferences) -> Vec<KeyBinding> {
     ]);
     for shortcut in TerminalShortcut::ALL {
         let context = match shortcut {
-            TerminalShortcut::New
+            TerminalShortcut::Grow
+            | TerminalShortcut::Shrink
+            | TerminalShortcut::New
             | TerminalShortcut::Close
             | TerminalShortcut::Previous
             | TerminalShortcut::Next
@@ -91,6 +93,8 @@ fn terminal_bindings(preferences: &Preferences) -> Vec<KeyBinding> {
                 TerminalShortcut::Maximize => {
                     KeyBinding::new(&key, MaximizeTerminal, Some(context))
                 }
+                TerminalShortcut::Grow => KeyBinding::new(&key, GrowTerminal, Some(context)),
+                TerminalShortcut::Shrink => KeyBinding::new(&key, ShrinkTerminal, Some(context)),
                 TerminalShortcut::New => KeyBinding::new(&key, NewTerminal, Some(context)),
                 TerminalShortcut::Close => KeyBinding::new(&key, CloseTerminal, Some(context)),
                 TerminalShortcut::Previous => {
@@ -858,6 +862,40 @@ mod shortcut_tests {
                 KeyContext::parse("ZvimWindow").unwrap(),
                 KeyContext::parse(context).unwrap(),
             ];
+            assert!(
+                map.bindings_for_input(&[Keystroke::parse(key).unwrap()], &contexts)
+                    .0
+                    .is_empty()
+            );
+        }
+    }
+    #[test]
+    fn dock_resize_shortcuts_are_terminal_only_and_customisable() {
+        use crate::ui::{GrowTerminal, ShrinkTerminal};
+        let map = Keymap::new(terminal_bindings(&Preferences::default()));
+        assert_action(&map, "cmd-shift-up", "Terminal", &GrowTerminal);
+        assert_action(&map, "cmd-shift-down", "Terminal", &ShrinkTerminal);
+        let contexts = [
+            KeyContext::parse("ZvimWindow").unwrap(),
+            KeyContext::parse("Zvim").unwrap(),
+        ];
+        for key in ["cmd-shift-up", "cmd-shift-down"] {
+            assert!(
+                map.bindings_for_input(&[Keystroke::parse(key).unwrap()], &contexts)
+                    .0
+                    .is_empty()
+            );
+        }
+        let p = Preferences {
+            terminal_grow_key: "alt-up".into(),
+            terminal_shrink_key: "alt-down".into(),
+            ..Preferences::default()
+        };
+        let map = Keymap::new(terminal_bindings(&p));
+        assert_action(&map, "alt-up", "Terminal", &GrowTerminal);
+        assert_action(&map, "alt-down", "Terminal", &ShrinkTerminal);
+        let contexts = [KeyContext::parse("Terminal").unwrap()];
+        for key in ["cmd-shift-up", "cmd-shift-down"] {
             assert!(
                 map.bindings_for_input(&[Keystroke::parse(key).unwrap()], &contexts)
                     .0

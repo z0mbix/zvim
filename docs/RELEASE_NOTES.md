@@ -1,10 +1,10 @@
 A focused Neovim frontend built with GPUI. This is an early development release.
 
-## New in 0.0.9
+## New in 0.0.10
 
-- Terminal numbering now advances only when a shell is created. Split panes and dividers no longer cause skipped numbers; names remain stable when terminals close.
-- Cmd+[ and Cmd+] now cycle backwards and forwards through all terminal tabs across every split pane, in terminal-number order, wrapping at either end. Inactive tabs and vertically stacked panes are reachable. Cmd+Shift+[ / ] still cycles within the focused pane, and Cmd+1–9 still selects a tab within that pane.
-- Settings and Terminal menu labels now describe cycling across all panes.
+- Cmd+Shift+Up makes the terminal dock 40 logical pixels taller; Cmd+Shift+Down makes it 40 pixels shorter. Resizing respects the same minimum editor and terminal sizes as mouse dragging.
+- Resize shortcuts apply while a terminal is focused and the dock is visible alongside the editor. They do nothing while maximised.
+- Resize bindings are editable in Settings → Keybindings, with matching Terminal menu actions.
 
 ## Install
 

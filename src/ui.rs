@@ -23,6 +23,8 @@ actions!(
         About,
         ToggleTerminal,
         MaximizeTerminal,
+        GrowTerminal,
+        ShrinkTerminal,
         CloseTerminal,
         FocusTerminal,
         NewTerminal,
@@ -503,6 +505,24 @@ impl Editor {
         {
             self.select_terminal_pane(pane, window, cx);
         }
+    }
+
+    fn resize_terminal_dock(&mut self, delta: f32, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.terminal_visible
+            || self.terminal_maximized
+            || self.exited
+            || self.close_pending
+            || self.close_requested
+        {
+            return;
+        }
+        self.terminal_fraction = resized_terminal_fraction(
+            f32::from(window.viewport_size().height),
+            self.terminal_fraction,
+            delta,
+        );
+        window.refresh();
+        cx.notify();
     }
 
     fn maximize_terminal(
@@ -1771,6 +1791,10 @@ impl Render for Editor {
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::toggle_terminal))
             .on_action(cx.listener(Self::maximize_terminal))
+            .on_action(cx.listener(|v, _: &GrowTerminal, w, cx| v.resize_terminal_dock(40., w, cx)))
+            .on_action(
+                cx.listener(|v, _: &ShrinkTerminal, w, cx| v.resize_terminal_dock(-40., w, cx)),
+            )
             .child(
                 canvas(
                     |_, _, _| {},
@@ -1957,6 +1981,13 @@ impl Render for Editor {
             })
     }
 }
+fn resized_terminal_fraction(height: f32, fraction: f32, delta: f32) -> f32 {
+    if height <= 0. {
+        return fraction;
+    }
+    split_height(height, (split_height(height, fraction) + delta) / height) / height
+}
+
 fn split_height(height: f32, fraction: f32) -> f32 {
     let minimum = 80_f32.min(height / 2.);
     (height * fraction).clamp(minimum, (height - minimum).max(minimum))
@@ -2241,7 +2272,21 @@ pub fn request_close_all(cx: &mut App) {
 
 #[cfg(test)]
 mod tests {
-    use super::{FontStyle, FontWeight, parse_font, split_height};
+    use super::{FontStyle, FontWeight, parse_font, resized_terminal_fraction, split_height};
+    #[test]
+    fn keyboard_resize_clamps_and_can_reverse_at_limits() {
+        let taller = resized_terminal_fraction(800., 0.4, 40.);
+        assert_eq!(split_height(800., taller), 360.);
+        assert_eq!(resized_terminal_fraction(800., taller, -40.), 0.4);
+        assert_eq!(resized_terminal_fraction(800., 0.9, 40.), 0.9);
+        assert_eq!(resized_terminal_fraction(800., 0.1, -40.), 0.1);
+        assert_eq!(
+            split_height(800., resized_terminal_fraction(800., 1., -40.)),
+            680.
+        );
+        assert_eq!(resized_terminal_fraction(100., 0.4, 40.), 0.5);
+        assert_eq!(resized_terminal_fraction(0., 0.4, 40.), 0.4);
+    }
     #[test]
     fn terminal_split_keeps_both_panes_visible() {
         assert_eq!(split_height(800., 0.4), 320.);
