@@ -176,9 +176,7 @@ impl NativeSurface {
     ) {
         let Some(key) = native_key(key) else {
             if matches!(action, KeyAction::Press | KeyAction::Repeat)
-                && !modifiers.contains(Modifiers::CONTROL)
-                && !modifiers.contains(Modifiers::ALT)
-                && !modifiers.contains(Modifiers::SUPER)
+                && allows_text_fallback(modifiers)
                 && let Some(text) = text
                 && let Ok(text) = CString::new(text)
             {
@@ -268,12 +266,27 @@ fn key_modifiers(
     if implied_shift {
         value.insert(Modifiers::SHIFT);
     }
-    let consumed = if has_text && value.contains(Modifiers::SHIFT) {
-        Modifiers::SHIFT
-    } else {
-        Modifiers::empty()
-    };
+    let mut consumed = Modifiers::empty();
+    if has_text {
+        if value.contains(Modifiers::SHIFT) {
+            consumed.insert(Modifiers::SHIFT);
+        }
+        // GPUI has already translated Option into text (e.g. British Option+3
+        // into '#'). Without this, Kitty encodes Alt+3 instead of the text.
+        if cfg!(target_os = "macos")
+            && value.contains(Modifiers::ALT)
+            && allows_text_fallback(value)
+        {
+            consumed.insert(Modifiers::ALT);
+        }
+    }
     (value, consumed)
+}
+
+fn allows_text_fallback(modifiers: Modifiers) -> bool {
+    !modifiers.contains(Modifiers::CONTROL)
+        && !modifiers.contains(Modifiers::SUPER)
+        && (cfg!(target_os = "macos") || !modifiers.contains(Modifiers::ALT))
 }
 
 struct NativeKey {
@@ -594,6 +607,32 @@ mod tests {
         let (active, consumed) = key_modifiers(modifiers, false, false);
         assert_eq!(active, Modifiers::SHIFT);
         assert_eq!(consumed, Modifiers::empty());
+    }
+
+    #[test]
+    fn option_text_consumes_alt_only_on_macos() {
+        let (active, consumed) = key_modifiers(Modifiers::ALT, false, true);
+        assert_eq!(active, Modifiers::ALT);
+        assert_eq!(consumed.contains(Modifiers::ALT), cfg!(target_os = "macos"));
+        assert_eq!(
+            allows_text_fallback(Modifiers::ALT),
+            cfg!(target_os = "macos")
+        );
+
+        let (_, consumed) = key_modifiers(Modifiers::ALT, false, false);
+        assert_eq!(consumed, Modifiers::empty());
+    }
+
+    #[test]
+    fn option_shortcuts_keep_control_and_command_modifiers() {
+        for other in [Modifiers::CONTROL, Modifiers::SUPER] {
+            let mut modifiers = Modifiers::ALT;
+            modifiers.insert(other);
+            let (active, consumed) = key_modifiers(modifiers, false, true);
+            assert_eq!(active, modifiers);
+            assert_eq!(consumed, Modifiers::empty());
+            assert!(!allows_text_fallback(modifiers));
+        }
     }
 
     #[test]

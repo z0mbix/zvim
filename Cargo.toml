@@ -1,6 +1,6 @@
 [package]
 name = "zvim"
-version = "0.0.10"
+version = "0.0.11"
 edition = "2024"
 license = "Apache-2.0"
 description = "A focused GPUI frontend for Neovim"
@@ -42,5 +42,10 @@ cc = "1"
 
 [[example]]
 name = "desktop_features"
+required-features = ["gui"]
+test = false
+
+[[example]]
+name = "terminal_keyboard"
 required-features = ["gui"]
 test = false

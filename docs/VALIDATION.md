@@ -2,6 +2,14 @@
 
 Zvim targets macOS and Linux only. Linux runtime behaviour still requires validation.
 
+## Option-generated terminal text (2026-10-15, macOS arm64)
+
+- Reproduced with native AppKit Option+3 events on the British keyboard layout and Kitty keyboard disambiguation enabled: the child process received `ESC [ 51 ; 3 u` (Alt+3) instead of `#`. Marking Option as consumed by the generated text fixes this.
+- The `terminal_keyboard` example checks real child-process input in legacy, Kitty disambiguation and xterm modifyOtherKeys mode 2. Each native press/repeat/release sequence now produces exactly `##`, with no release input or duplicate insertion.
+- All 59 application/library/Neovim tests and the example unit tests passed. The native bridge's 14 unit tests passed, including Option text, modifier preservation and shifted punctuation coverage. The full suite needs local socket access for the existing application-instance tests.
+- The debug application build, formatting, strict all-target Clippy and diff checks passed.
+- Tests used a temporary Zig 0.16.0 toolchain; the installed Zig 0.17.0 is incompatible with the pinned Ghostty engine. No installed application or user configuration was changed. Linux runtime input was not exercised.
+
 ## Verified locally (2026-09-23, macOS arm64)
 
 - Rust build using GPUI 0.2.2 and bundled Neovim 0.12.5.

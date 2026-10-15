@@ -1,10 +1,9 @@
 A focused Neovim frontend built with GPUI. This is an early development release.
 
-## New in 0.0.10
+## Fixed in 0.0.11
 
-- Cmd+Shift+Up makes the terminal dock 40 logical pixels taller; Cmd+Shift+Down makes it 40 pixels shorter. Resizing respects the same minimum editor and terminal sizes as mouse dragging.
-- Resize shortcuts apply while a terminal is focused and the dock is visible alongside the editor. They do nothing while maximised.
-- Resize bindings are editable in Settings → Keybindings, with matching Terminal menu actions.
+- Fixed macOS terminal input for Option-generated characters, including `#` from Option+3 on British keyboards. These characters now work when shells or terminal applications enable the Kitty keyboard protocol.
+- Added native regression coverage for key presses, held repeats and releases across legacy, Kitty and xterm modifyOtherKeys modes. Control and Command shortcuts remain intact.
 
 ## Install
 
