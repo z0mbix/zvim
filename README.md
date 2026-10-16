@@ -2,6 +2,8 @@
 
 A focused native frontend for Neovim, written in Rust with GPUI. Neovim owns editing, splits, plugins, LSP, and configuration. Zvim draws the screen and integrates input, clipboard, windows, and file opening with the desktop.
 
+![Zvim showing Neovim with split editors and three native terminal panes](assets/screenshots/zvim.png)
+
 **Platforms: macOS and Linux only.** macOS is exercised locally; Linux remains experimental. The native Ghostty terminal requires Wayland on Linux; the editor can still run on X11. See [validation](docs/VALIDATION.md).
 
 ## Run on macOS
