@@ -131,8 +131,20 @@ The native dependency and its patched Ghostty source are pinned in Cargo. The in
 
 ## Development checks
 
+Install [prek](https://prek.j178.dev/installation/) and enable the pre-commit hook once per checkout:
+
 ```sh
-cargo fmt --check
+prek install
+prek run --all-files
+```
+
+The hook runs `cargo fmt --all` using the rustfmt version pinned in `rust-toolchain.toml`,
+covering the application, examples, tests, and local Ghostty crate. If formatting changes
+files, review and stage those changes before retrying the commit. To format everything
+manually, run `cargo fmt --all`.
+
+```sh
+cargo fmt --all --check
 cargo test --locked --all-targets
 cargo clippy --locked --all-targets -- -D warnings
 ```

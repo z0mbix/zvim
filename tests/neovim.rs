@@ -4,12 +4,15 @@ use std::{
     time::{Duration, Instant},
 };
 use zvim::session::{Event, Launch, Session};
+
 fn eval(s: &Session, expr: &str) -> Value {
     s.rpc.request("nvim_eval", vec![expr.into()]).unwrap()
 }
+
 fn command(s: &Session, cmd: &str) {
     s.rpc.request("nvim_command", vec![cmd.into()]).unwrap();
 }
+
 fn wait(s: &Session, predicate: impl Fn() -> bool) {
     let start = Instant::now();
     while !predicate() {
@@ -21,6 +24,7 @@ fn wait(s: &Session, predicate: impl Fn() -> bool) {
     }
     let _ = s;
 }
+
 #[test]
 fn bundled_editor_roundtrip() {
     let dir = std::env::temp_dir().join(format!("zvim-test-{}", std::process::id()));
@@ -96,6 +100,7 @@ fn bundled_editor_roundtrip() {
     );
     std::fs::remove_dir_all(dir).unwrap();
 }
+
 #[test]
 fn clipboard_rpc_is_bidirectional() {
     let s = Session::spawn(&Launch {

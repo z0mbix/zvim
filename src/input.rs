@@ -35,6 +35,7 @@ pub fn special_key(
         name
     ))
 }
+
 pub fn literal(text: &str) -> String {
     text.replace('<', "<LT>")
 }
@@ -42,6 +43,7 @@ pub fn literal(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn controls_and_literals() {
         assert_eq!(

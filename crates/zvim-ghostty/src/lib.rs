@@ -7,6 +7,7 @@
 
 // Retain the upstream native library build and its linker metadata.
 extern crate ghostty_upstream as _;
+
 mod clipboard;
 mod native;
 mod terminal;

@@ -10,10 +10,12 @@ pub struct Search {
     pub status: (isize, isize),
     pub select_first: bool,
 }
+
 impl Search {
     pub fn len(&self) -> usize {
         self.text.encode_utf16().count()
     }
+
     fn byte(&self, offset: usize) -> usize {
         let mut units = 0;
         for (index, ch) in self.text.char_indices() {
@@ -24,9 +26,11 @@ impl Search {
         }
         self.text.len()
     }
+
     pub fn slice(&self, range: Range<usize>) -> String {
         self.text[self.byte(range.start)..self.byte(range.end.max(range.start))].to_owned()
     }
+
     pub fn replace(&mut self, range: Option<Range<usize>>, text: &str) -> usize {
         let range = range
             .or(self.marked.take())
@@ -39,6 +43,7 @@ impl Search {
         self.marked = None;
         start
     }
+
     pub fn backspace(&mut self) {
         if self.selection.is_empty() && self.selection.start > 0 {
             let byte = self.byte(self.selection.start);
@@ -48,6 +53,7 @@ impl Search {
         }
         self.replace(None, "");
     }
+
     pub fn delete(&mut self) {
         if self.selection.is_empty() {
             self.selection.end += self.text[self.byte(self.selection.end)..]
@@ -57,6 +63,7 @@ impl Search {
         }
         self.replace(None, "");
     }
+
     pub fn move_cursor(&mut self, right: bool) {
         let pos = if !self.selection.is_empty() {
             if right {
@@ -85,6 +92,7 @@ impl Search {
 #[cfg(test)]
 mod tests {
     use super::Search;
+
     #[test]
     fn edits_unicode_selection_and_composition() {
         let mut s = Search::default();

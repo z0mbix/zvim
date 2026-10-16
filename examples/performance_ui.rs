@@ -10,6 +10,7 @@ mod terminal;
 mod terminal_search;
 #[path = "../src/ui.rs"]
 mod ui;
+
 use gpui::*;
 use std::time::Duration;
 

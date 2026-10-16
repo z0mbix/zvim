@@ -5,18 +5,22 @@
 mod terminal;
 #[path = "../src/terminal_search.rs"]
 mod terminal_search;
+
 extern crate zvim as _;
 use gpui::*;
 #[cfg(target_os = "macos")]
 use std::time::Duration;
+
 struct Harness {
     terminal: Entity<terminal::Terminal>,
 }
+
 impl Render for Harness {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         self.terminal.clone()
     }
 }
+
 #[cfg(target_os = "macos")]
 fn option_three() {
     use std::ffi::{c_char, c_void};
@@ -97,6 +101,7 @@ fn option_three() {
         }
     }
 }
+
 #[cfg(target_os = "macos")]
 fn main() {
     terminal::configure_resources();
@@ -148,6 +153,7 @@ fn main() {
         }).detach();
     });
 }
+
 #[cfg(not(target_os = "macos"))]
 fn main() {
     eprintln!("This keyboard test requires macOS");

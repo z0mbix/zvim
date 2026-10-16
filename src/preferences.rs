@@ -4,6 +4,7 @@ use zvim::icons::{APP_ICONS, resolve};
 use zvim::settings::{Preferences, TerminalShortcut, Theme};
 
 pub struct AppPreferences(pub Preferences);
+
 impl Global for AppPreferences {}
 
 pub fn bind_keys(cx: &mut App) {
@@ -272,6 +273,7 @@ pub fn refresh(cx: &mut App) {
         cx.set_global(AppPreferences(p));
     }
 }
+
 pub fn dark(window: &Window, cx: &App) -> bool {
     cx.global::<AppPreferences>().0.theme.is_dark(matches!(
         window.appearance(),
@@ -316,6 +318,7 @@ pub struct PreferencesView {
     cli_installing: bool,
     icon_images: std::collections::HashMap<&'static str, Arc<Image>>,
 }
+
 impl PreferencesView {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus = cx.focus_handle();
@@ -367,6 +370,7 @@ impl PreferencesView {
                 .map(|e| format!("Cannot read settings: {e}")),
         }
     }
+
     fn choose(&mut self, choice: Choice, cx: &mut Context<Self>) {
         match choice {
             Choice::Tab(tab) => {
@@ -483,6 +487,7 @@ impl PreferencesView {
             .map(|e| format!("Settings were not saved: {e}"));
         cx.notify();
     }
+
     fn record_shortcut(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
         let Some(shortcut) = self.recording_shortcut else {
             return;
@@ -595,6 +600,7 @@ impl PreferencesView {
             }))
             .child(label)
     }
+
     fn toggle(
         &self,
         index: usize,
@@ -644,6 +650,7 @@ impl PreferencesView {
             )
     }
 }
+
 impl Render for PreferencesView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = cx.global::<AppPreferences>().0.clone();
@@ -768,6 +775,7 @@ mod shortcut_tests {
         Preferences, canonical_shortcut, shortcut_aliases, terminal_bindings, validate_shortcuts,
     };
     use gpui::{Action, KeyContext, Keymap, Keystroke};
+
     fn assert_action(map: &Keymap, key: &str, context: &str, expected: &dyn Action) {
         let contexts = [
             KeyContext::parse("ZvimWindow").unwrap(),
@@ -783,6 +791,7 @@ mod shortcut_tests {
             "{key} in {context}"
         );
     }
+
     #[test]
     #[cfg(target_os = "macos")]
     fn window_shortcuts_work_in_editor_terminal_and_settings() {
@@ -800,6 +809,7 @@ mod shortcut_tests {
             assert!(validate_shortcuts(&p).is_err());
         }
     }
+
     #[test]
     fn zed_bindings_respect_terminal_and_editor_contexts() {
         use crate::ui::*;
@@ -869,6 +879,7 @@ mod shortcut_tests {
             );
         }
     }
+
     #[test]
     fn dock_resize_shortcuts_are_terminal_only_and_customisable() {
         use crate::ui::{GrowTerminal, ShrinkTerminal};
@@ -903,6 +914,7 @@ mod shortcut_tests {
             );
         }
     }
+
     #[test]
     fn customised_shortcuts_replace_old_bindings_and_aliases() {
         use crate::ui::FocusTerminal;
@@ -922,6 +934,7 @@ mod shortcut_tests {
                 .is_empty()
         );
     }
+
     #[test]
     fn rejects_conflicts_and_accepts_zed_defaults() {
         let mut p = Preferences::default();
@@ -935,6 +948,7 @@ mod shortcut_tests {
         p.terminal_toggle_key = "alt-t".into();
         assert!(validate_shortcuts(&p).is_ok());
     }
+
     #[test]
     fn shifted_punctuation_supports_both_platform_event_forms() {
         for (base, shifted) in [

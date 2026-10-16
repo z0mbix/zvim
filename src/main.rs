@@ -3,14 +3,17 @@ mod preferences;
 mod terminal;
 mod terminal_search;
 mod ui;
+
 use gpui::*;
 use zvim::session::Launch;
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("zvim: {error:#}");
         std::process::exit(1);
     }
 }
+
 fn run() -> anyhow::Result<()> {
     #[cfg(target_os = "macos")]
     {

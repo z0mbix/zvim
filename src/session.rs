@@ -25,13 +25,16 @@ pub enum Event {
     Error(String),
     Exited(bool),
 }
+
 type Response = std::result::Result<Value, String>;
+
 #[derive(Clone)]
 pub struct Rpc {
     outbound: mpsc::Sender<Value>,
     pending: Arc<Mutex<HashMap<u64, mpsc::Sender<Response>>>>,
     next: Arc<AtomicU64>,
 }
+
 impl Rpc {
     fn start_request(
         &self,
@@ -56,6 +59,7 @@ impl Rpc {
         }
         Ok((id, rx))
     }
+
     /// For worker threads and tests only; never block the GPUI thread on RPC.
     pub fn request(&self, method: &str, params: Vec<Value>) -> Result<Value> {
         let (id, rx) = self.start_request(method, params)?;
@@ -65,6 +69,7 @@ impl Rpc {
             .context("Neovim request timed out")?
             .map_err(anyhow::Error::msg)
     }
+
     pub fn send(&self, method: &str, params: Vec<Value>) {
         let _ = self.outbound.send(Value::Array(vec![
             2.into(),
@@ -72,12 +77,14 @@ impl Rpc {
             Value::Array(params),
         ]));
     }
+
     pub fn reply(&self, id: u64, value: Value) {
         let _ = self
             .outbound
             .send(Value::Array(vec![1.into(), id.into(), Value::Nil, value]));
     }
 }
+
 pub struct Session {
     pub rpc: Rpc,
     pub events: async_channel::Receiver<Event>,
@@ -86,6 +93,7 @@ pub struct Session {
     resize: crate::latest_request::LatestRequest<(usize, usize)>,
     child: Arc<Mutex<Child>>,
 }
+
 #[derive(Clone, Default)]
 pub struct Launch {
     pub clean: bool,
@@ -96,6 +104,7 @@ pub struct Launch {
     pub state_directory: Option<PathBuf>,
     pub environment: Option<Vec<(std::ffi::OsString, std::ffi::OsString)>>,
 }
+
 impl Launch {
     fn env(&self, name: &str) -> Option<std::ffi::OsString> {
         match &self.environment {
@@ -107,6 +116,7 @@ impl Launch {
         }
     }
 }
+
 pub fn bundled_neovim() -> Result<PathBuf> {
     let exe = std::env::current_exe()?;
     let dir = exe.parent().context("no executable directory")?;
@@ -133,6 +143,7 @@ pub fn bundled_neovim() -> Result<PathBuf> {
         "Bundled Neovim is missing. Run python3 scripts/bundle-neovim.py, or reinstall Zvim.",
     )
 }
+
 /// Desktop launches often omit package-manager paths. Preserve existing entries and append common locations.
 fn editor_path(launch: &Launch) -> Result<std::ffi::OsString> {
     #[allow(unused_mut)]
@@ -157,6 +168,7 @@ fn editor_path(launch: &Launch) -> Result<std::ffi::OsString> {
     }
     std::env::join_paths(paths).context("invalid PATH")
 }
+
 impl Session {
     pub fn spawn(launch: &Launch) -> Result<Self> {
         let exe = bundled_neovim()?;
@@ -453,6 +465,7 @@ impl Session {
             child,
         })
     }
+
     pub fn new_terminal(&self) {
         self.rpc.send(
             "nvim_exec_lua",
@@ -475,29 +488,36 @@ impl Session {
             ],
         );
     }
+
     pub fn initialize(&self, width: u64, height: u64) -> Result<()> {
         initialize(&self.rpc, width, height)
     }
+
     pub fn take_frame(&self) -> Option<Grid> {
         self.frame.lock().unwrap().take()
     }
+
     pub fn input(&self, text: impl Into<String>) {
         crate::startup::mark("input_submit");
         let _ = self.input.send(text.into());
     }
+
     pub fn resize(&self, w: usize, h: usize) {
         self.resize.submit((w, h));
     }
+
     pub fn paste(&self, text: String) {
         self.rpc
             .send("nvim_paste", vec![text.into(), true.into(), (-1).into()]);
     }
+
     pub fn close(&self) {
         self.rpc.send("nvim_exec_lua", vec![
             "local ok, err = pcall(vim.cmd, 'confirm qall'); if not ok then vim.api.nvim_err_writeln(tostring(err)) end; vim.rpcnotify(vim.g.zvim_channel, 'zvim_close_returned')".into(),
             Value::Array(vec![]),
         ]);
     }
+
     pub fn open_files(&self, paths: &[PathBuf]) {
         let files = Value::Array(
             paths
@@ -508,6 +528,7 @@ impl Session {
         self.rpc.send("nvim_exec_lua",vec!["local paths = ...; for _,p in ipairs(paths) do vim.cmd('argadd '..vim.fn.fnameescape(p)) end; if paths[1] then vim.cmd('edit '..vim.fn.fnameescape(paths[1])) end".into(),Value::Array(vec![files])]);
     }
 }
+
 impl Drop for Session {
     fn drop(&mut self) {
         if let Ok(mut child) = self.child.lock()
@@ -518,6 +539,7 @@ impl Drop for Session {
         }
     }
 }
+
 pub fn initialize(rpc: &Rpc, width: u64, height: u64) -> Result<()> {
     crate::startup::mark("rpc_initialize_begin");
     let api = rpc.request("nvim_get_api_info", vec![])?;

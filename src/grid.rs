@@ -7,6 +7,7 @@ pub struct Cell {
     pub text: String,
     pub highlight: u64,
 }
+
 impl Default for Cell {
     fn default() -> Self {
         Self {
@@ -15,6 +16,7 @@ impl Default for Cell {
         }
     }
 }
+
 #[derive(Clone, Debug, Default)]
 pub struct Highlight {
     pub foreground: Option<u32>,
@@ -28,6 +30,7 @@ pub struct Highlight {
     pub strikethrough: bool,
     pub blend: u8,
 }
+
 #[derive(Clone, Debug)]
 pub struct Cursor {
     pub row: usize,
@@ -36,6 +39,7 @@ pub struct Cursor {
     pub percentage: f32,
     pub attr: u64,
 }
+
 impl Default for Cursor {
     fn default() -> Self {
         Self {
@@ -47,6 +51,7 @@ impl Default for Cursor {
         }
     }
 }
+
 #[derive(Clone, Debug)]
 pub struct Grid {
     pub width: usize,
@@ -65,6 +70,7 @@ pub struct Grid {
     pub mode: String,
     modes: Vec<Value>,
 }
+
 impl Default for Grid {
     fn default() -> Self {
         Self {
@@ -86,26 +92,31 @@ impl Default for Grid {
         }
     }
 }
+
 pub fn field<'a>(v: &'a Value, name: &str) -> Option<&'a Value> {
     v.as_map()?
         .iter()
         .find(|(k, _)| k.as_str() == Some(name))
         .map(|(_, v)| v)
 }
+
 fn num(a: &[Value], i: usize) -> Result<usize> {
     a.get(i)
         .and_then(Value::as_u64)
         .and_then(|v| v.try_into().ok())
         .ok_or_else(|| anyhow::anyhow!("missing unsigned argument {i}"))
 }
+
 fn color(v: Option<&Value>) -> Option<u32> {
     v.and_then(Value::as_i64)
         .filter(|n| *n >= 0)
         .map(|n| n as u32 & 0xffffff)
 }
+
 fn flag(v: &Value, k: &str) -> bool {
     field(v, k).and_then(Value::as_bool).unwrap_or(false)
 }
+
 impl Grid {
     pub fn cell(&self, row: usize, col: usize) -> Option<&Cell> {
         if row < self.height && col < self.width {
@@ -114,6 +125,7 @@ impl Grid {
             None
         }
     }
+
     pub fn colors(&self, h: &Highlight) -> (u32, u32, u32) {
         let fg = h.foreground.unwrap_or(self.foreground);
         let bg = h.background.unwrap_or(self.background);
@@ -123,6 +135,7 @@ impl Grid {
             (fg, bg, h.special.unwrap_or(self.special))
         }
     }
+
     /// Apply ordered events; only snapshots returned at flush may be displayed.
     pub fn redraw(&mut self, events: &[Value]) -> Result<Vec<Self>> {
         let mut frames = vec![];
@@ -321,12 +334,15 @@ impl Grid {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     fn ev(name: &str, args: Vec<Value>) -> Value {
         Value::Array(vec![name.into(), Value::Array(args)])
     }
+
     fn resize() -> Value {
         ev("grid_resize", vec![1.into(), 4.into(), 3.into()])
     }
+
     fn line(row: u64, text: &str) -> Value {
         ev(
             "grid_line",
@@ -349,6 +365,7 @@ mod tests {
             ],
         )
     }
+
     #[test]
     fn batching_highlights_and_forward_compatibility() {
         let mut g = Grid::default();
@@ -360,6 +377,7 @@ mod tests {
         g.redraw(&[line(0, "xxxx")]).unwrap();
         assert_eq!(frames[0].cell(0, 0).unwrap().text, "a");
     }
+
     #[test]
     fn scroll_both_directions_and_partial_region() {
         let mut g = Grid::default();
@@ -397,6 +415,7 @@ mod tests {
         assert_eq!(g.cell(1, 0).unwrap().text, "a");
         assert_eq!(g.cell(0, 0).unwrap().text, " ");
     }
+
     #[test]
     fn wide_cells_repeats_and_combining_marks() {
         let mut g = Grid::default();
@@ -421,6 +440,7 @@ mod tests {
         assert_eq!(g.cell(0, 3).unwrap().text, "e\u{301}");
         assert_eq!(g.cell(0, 1).unwrap().highlight, 2);
     }
+
     #[test]
     fn malformed_update_is_error_not_panic() {
         let mut g = Grid::default();

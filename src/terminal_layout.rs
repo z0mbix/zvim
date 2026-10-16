@@ -67,20 +67,24 @@ impl<T> TerminalLayout<T> {
         self.next_id += 1;
         id
     }
+
     fn terminal_id(&mut self) -> u64 {
         let id = self.next_terminal_id;
         self.next_terminal_id += 1;
         id
     }
+
     pub fn focused_pane(&self) -> Option<u64> {
         self.focused
     }
+
     pub fn pane(&self, id: u64) -> Option<&TerminalTabs<T>> {
         self.panes
             .iter()
             .find(|(pane, _)| *pane == id)
             .map(|(_, tabs)| tabs)
     }
+
     pub fn focus_pane(&mut self, id: u64) -> bool {
         if self.pane(id).is_none() {
             return false;
@@ -88,6 +92,7 @@ impl<T> TerminalLayout<T> {
         self.focused = Some(id);
         true
     }
+
     pub fn focus_terminal(&mut self, id: u64) -> bool {
         let Some((pane, _)) = self
             .panes
@@ -99,28 +104,35 @@ impl<T> TerminalLayout<T> {
         self.focused = Some(*pane);
         true
     }
+
     pub fn active(&self) -> Option<&T> {
         self.pane(self.focused?).and_then(|tabs| tabs.active())
     }
+
     pub fn active_id(&self) -> Option<u64> {
         self.pane(self.focused?).and_then(|tabs| tabs.active_id())
     }
+
     pub fn active_index(&self) -> usize {
         self.focused
             .and_then(|id| self.pane(id))
             .map_or(0, |tabs| tabs.active_index())
     }
+
     pub fn len(&self) -> usize {
         self.focused
             .and_then(|id| self.pane(id))
             .map_or(0, |tabs| tabs.len())
     }
+
     pub fn is_empty(&self) -> bool {
         self.panes.is_empty()
     }
+
     pub fn iter(&self) -> impl Iterator<Item = &(u64, T)> {
         self.panes.iter().flat_map(|(_, tabs)| tabs.iter())
     }
+
     pub fn visible_ids(&self, zoom: bool) -> Vec<u64> {
         self.panes
             .iter()
@@ -128,17 +140,20 @@ impl<T> TerminalLayout<T> {
             .filter_map(|(_, tabs)| tabs.active_id())
             .collect()
     }
+
     pub fn select(&mut self, index: usize) -> bool {
         self.panes
             .iter_mut()
             .find(|(id, _)| Some(*id) == self.focused)
             .is_some_and(|(_, tabs)| tabs.select(index))
     }
+
     pub fn adjacent(&self, next: bool) -> usize {
         self.focused
             .and_then(|id| self.pane(id))
             .map_or(0, |tabs| tabs.adjacent(next))
     }
+
     pub fn cycle_all(&mut self, next: bool) -> bool {
         let Some(active) = self.active_id() else {
             return false;
@@ -161,6 +176,7 @@ impl<T> TerminalLayout<T> {
         }
         false
     }
+
     pub fn push(&mut self, value: T) -> u64 {
         let tab = self.terminal_id();
         if self.focused.is_none() {
@@ -177,6 +193,7 @@ impl<T> TerminalLayout<T> {
         tabs.push_with_id(tab, value);
         tab
     }
+
     pub fn split(&mut self, pane: u64, axis: Axis, value: T) -> Option<u64> {
         self.pane(pane)?;
         let tab = self.terminal_id();
@@ -189,6 +206,7 @@ impl<T> TerminalLayout<T> {
         self.focused = Some(new_pane);
         Some(tab)
     }
+
     pub fn remove(&mut self, tab: u64) -> Option<T> {
         let index = self
             .panes
@@ -205,6 +223,7 @@ impl<T> TerminalLayout<T> {
         }
         Some(removed)
     }
+
     pub fn layout(&self, width: f32, height: f32, zoom: bool) -> (Vec<(u64, Rect)>, Vec<Divider>) {
         let rect = Rect {
             x: 0.,
@@ -225,6 +244,7 @@ impl<T> TerminalLayout<T> {
         }
         (panes, dividers)
     }
+
     pub fn resize(&mut self, divider: u64, ratio: f32) {
         if ratio.is_finite()
             && let Some(root) = &mut self.root
@@ -232,6 +252,7 @@ impl<T> TerminalLayout<T> {
             root.resize(divider, ratio.clamp(0., 1.));
         }
     }
+
     pub fn neighbour(&self, direction: Direction, width: f32, height: f32) -> Option<u64> {
         let (panes, _) = self.layout(width, height, false);
         let (_, current) = panes.iter().find(|(id, _)| Some(*id) == self.focused)?;
@@ -282,6 +303,7 @@ impl Node {
             Self::Split { first, .. } => first.first_pane(),
         }
     }
+
     fn split(&mut self, pane: u64, new_pane: u64, id: u64, axis: Axis) {
         match self {
             Self::Pane(existing) if *existing == pane => {
@@ -300,6 +322,7 @@ impl Node {
             _ => {}
         }
     }
+
     fn sibling(&self, pane: u64) -> Option<u64> {
         match self {
             Self::Split { first, second, .. } => {
@@ -314,6 +337,7 @@ impl Node {
             Self::Pane(_) => None,
         }
     }
+
     fn remove(self, pane: u64) -> Option<Self> {
         match self {
             Self::Pane(id) => (id != pane).then_some(Self::Pane(id)),
@@ -336,6 +360,7 @@ impl Node {
             },
         }
     }
+
     fn resize(&mut self, target: u64, value: f32) {
         if let Self::Split {
             id,
@@ -353,6 +378,7 @@ impl Node {
             }
         }
     }
+
     fn layout(&self, rect: Rect, panes: &mut Vec<(u64, Rect)>, dividers: &mut Vec<Divider>) {
         match self {
             Self::Pane(id) => panes.push((*id, rect)),
@@ -421,6 +447,7 @@ impl Node {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn cycling_reaches_hidden_tabs_and_vertical_splits_in_both_directions() {
         let mut layout = TerminalLayout::default();
@@ -445,6 +472,7 @@ mod tests {
         assert!(layout.cycle_all(true));
         assert_eq!(layout.active_id(), Some(third));
     }
+
     #[test]
     fn terminal_numbers_ignore_panes_and_dividers_and_survive_closing() {
         let mut layout = TerminalLayout::default();
@@ -517,6 +545,7 @@ mod tests {
         l.remove(l.active_id().unwrap());
         assert!(l.is_empty());
     }
+
     #[test]
     fn nested_layout_resize_zoom_and_directional_focus() {
         let mut l = TerminalLayout::default();
@@ -542,6 +571,7 @@ mod tests {
             assert!(panes.iter().all(|(_, r)| r.width >= 0. && r.height >= 0.));
         }
     }
+
     #[test]
     fn close_nested_pane_focuses_its_sibling_and_preserves_other_tabs() {
         let mut l = TerminalLayout::default();

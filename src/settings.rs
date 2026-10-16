@@ -9,6 +9,7 @@ pub struct Settings {
     pub x: Option<f32>,
     pub y: Option<f32>,
 }
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -19,11 +20,13 @@ impl Default for Settings {
         }
     }
 }
+
 pub fn data_dir() -> PathBuf {
     directories::ProjectDirs::from("dev", "zvim", "Zvim")
         .map(|d| d.config_dir().to_owned())
         .unwrap_or_else(std::env::temp_dir)
 }
+
 impl Settings {
     pub fn load() -> Self {
         std::fs::read(data_dir().join("window.json"))
@@ -31,6 +34,7 @@ impl Settings {
             .and_then(|s| serde_json::from_slice(&s).ok())
             .unwrap_or_default()
     }
+
     pub fn save_to(&self, dir: &std::path::Path) -> anyhow::Result<()> {
         use std::io::Write;
         std::fs::create_dir_all(dir)?;
@@ -50,6 +54,7 @@ pub enum Theme {
     Light,
     Dark,
 }
+
 impl Theme {
     pub fn is_dark(self, system_dark: bool) -> bool {
         match self {
@@ -87,6 +92,7 @@ pub struct Preferences {
     pub app_icon: String,
     pub cli_bin_directory: PathBuf,
 }
+
 impl Default for Preferences {
     fn default() -> Self {
         Self {
@@ -114,10 +120,12 @@ impl Default for Preferences {
         }
     }
 }
+
 impl Preferences {
     pub fn load() -> anyhow::Result<Self> {
         Self::load_from(&data_dir())
     }
+
     fn load_from(dir: &std::path::Path) -> anyhow::Result<Self> {
         match std::fs::read(dir.join("preferences.json")) {
             Ok(bytes) => {
@@ -129,6 +137,7 @@ impl Preferences {
             Err(e) => Err(e.into()),
         }
     }
+
     fn migrate_terminal_keys(&mut self) {
         if self.terminal_keymap_version == 0 {
             let defaults = Self::default();
@@ -141,9 +150,11 @@ impl Preferences {
             self.terminal_keymap_version = 1;
         }
     }
+
     pub fn save(&self) -> anyhow::Result<()> {
         self.save_to(&data_dir())
     }
+
     fn save_to(&self, dir: &std::path::Path) -> anyhow::Result<()> {
         std::fs::create_dir_all(dir)?;
         let temporary = dir.join(format!("preferences.{}.tmp", std::process::id()));
@@ -186,6 +197,7 @@ impl TerminalShortcut {
         Self::PaneLeft,
         Self::PaneRight,
     ];
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Toggle => "Show / hide",
@@ -203,6 +215,7 @@ impl TerminalShortcut {
             Self::PaneRight => "Next terminal across all panes",
         }
     }
+
     pub fn key(self, p: &Preferences) -> &str {
         match self {
             Self::Toggle => &p.terminal_toggle_key,
@@ -220,6 +233,7 @@ impl TerminalShortcut {
             Self::PaneRight => &p.terminal_pane_right_key,
         }
     }
+
     pub fn set(self, p: &mut Preferences, key: String) {
         *match self {
             Self::Toggle => &mut p.terminal_toggle_key,
@@ -242,6 +256,7 @@ impl TerminalShortcut {
 #[cfg(test)]
 mod tests {
     use super::{Preferences, Theme};
+
     #[test]
     fn upgrades_old_defaults_but_preserves_custom_shortcuts() {
         let mut old: Preferences = serde_json::from_str(
@@ -268,6 +283,7 @@ mod tests {
         custom.migrate_terminal_keys();
         assert_eq!(custom.terminal_toggle_key, "ctrl-`");
     }
+
     #[test]
     fn preferences_preserve_defaults_and_follow_system() {
         let p: Preferences = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
@@ -287,6 +303,7 @@ mod tests {
         assert!(Theme::System.is_dark(true));
         assert!(!Theme::System.is_dark(false));
     }
+
     #[test]
     fn unknown_icon_preserves_other_preferences_and_falls_back() {
         let p: Preferences = serde_json::from_str(
@@ -303,6 +320,7 @@ mod tests {
             serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
         assert_eq!(roundtrip.app_icon, "future-icon");
     }
+
     #[test]
     fn preferences_roundtrip_independently_of_geometry() {
         let dir = std::env::temp_dir().join(format!("zvim-preferences-{}", std::process::id()));

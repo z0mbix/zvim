@@ -178,6 +178,7 @@ impl NativeSurface {
             )
         }
     }
+
     pub fn search_status(&self) -> (isize, isize) {
         let (mut total, mut selected) = (-1, -1);
         // SAFETY: Called on the surface UI thread with valid output pointers.
@@ -186,6 +187,7 @@ impl NativeSurface {
         };
         (total, selected)
     }
+
     pub fn wakeup(&self) -> NativeWakeup {
         self.wakeup.clone()
     }

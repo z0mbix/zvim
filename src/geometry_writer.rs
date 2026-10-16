@@ -9,10 +9,12 @@ struct State {
     busy: bool,
     stopping: bool,
 }
+
 pub struct GeometryWriter {
     shared: Arc<(Mutex<State>, Condvar)>,
     worker: Option<std::thread::JoinHandle<()>>,
 }
+
 impl GeometryWriter {
     pub fn new(write: impl Fn(Settings) -> anyhow::Result<()> + Send + 'static) -> Self {
         let shared = Arc::new((Mutex::new(State::default()), Condvar::new()));
@@ -50,6 +52,7 @@ impl GeometryWriter {
             worker: Some(worker),
         }
     }
+
     pub fn submit(&self, settings: Settings) {
         let (lock, changed) = &*self.shared;
         let mut state = lock.lock().unwrap();
@@ -60,6 +63,7 @@ impl GeometryWriter {
         state.pending = Some(settings);
         changed.notify_one();
     }
+
     /// Wait from a background task on normal application quit, never during paint.
     pub fn flush(&self) {
         let (lock, changed) = &*self.shared;
@@ -69,6 +73,7 @@ impl GeometryWriter {
         }
     }
 }
+
 impl Drop for GeometryWriter {
     fn drop(&mut self) {
         let (lock, changed) = &*self.shared;
@@ -79,7 +84,9 @@ impl Drop for GeometryWriter {
         }
     }
 }
+
 static WRITER: OnceLock<GeometryWriter> = OnceLock::new();
+
 pub fn submit(settings: Settings) {
     WRITER
         .get_or_init(|| {
@@ -87,6 +94,7 @@ pub fn submit(settings: Settings) {
         })
         .submit(settings);
 }
+
 pub fn flush() {
     if let Some(writer) = WRITER.get() {
         writer.flush();
@@ -96,6 +104,7 @@ pub fn flush() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn failed_writes_can_retry_the_same_placement() {
         use std::sync::atomic::{AtomicUsize, Ordering};
@@ -113,6 +122,7 @@ mod tests {
         writer.flush();
         assert_eq!(attempts.load(Ordering::SeqCst), 2);
     }
+
     #[test]
     fn slow_writer_does_not_block_submission_and_coalesces_in_order() {
         let (started_tx, started_rx) = std::sync::mpsc::channel();
@@ -149,6 +159,7 @@ mod tests {
         writer.flush();
         assert_eq!(*writes.lock().unwrap(), vec![1., 100.]);
     }
+
     #[test]
     fn shutdown_drains_latest_placement_and_atomic_file_roundtrips() {
         let dir = tempfile::tempdir().unwrap();

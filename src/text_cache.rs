@@ -11,15 +11,18 @@ pub struct TextStyle {
     pub undercurl: bool,
     pub strikethrough: bool,
 }
+
 struct Entry<T> {
     value: T,
     referenced: bool,
 }
+
 pub struct TextCache<T> {
     styles: HashMap<TextStyle, HashMap<String, Entry<T>>>,
     clock: VecDeque<(TextStyle, String)>,
     capacity: usize,
 }
+
 impl<T> TextCache<T> {
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0);
@@ -29,15 +32,18 @@ impl<T> TextCache<T> {
             capacity,
         }
     }
+
     pub fn clear(&mut self) {
         self.styles.clear();
         self.clock.clear();
     }
+
     pub fn get(&mut self, style: TextStyle, text: &str) -> Option<&T> {
         let entry = self.styles.get_mut(&style)?.get_mut(text)?;
         entry.referenced = true;
         Some(&entry.value)
     }
+
     pub fn insert(&mut self, style: TextStyle, text: &str, value: T) {
         if let Some(entry) = self
             .styles
@@ -72,9 +78,11 @@ impl<T> TextCache<T> {
         self.clock.push_back((style, text.to_owned()));
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
     fn style() -> TextStyle {
         TextStyle {
             foreground: 1,
@@ -86,6 +94,7 @@ mod tests {
             strikethrough: false,
         }
     }
+
     #[test]
     fn unicode_styles_and_font_invalidation() {
         let mut cache = TextCache::new(3);
@@ -104,6 +113,7 @@ mod tests {
         assert!(cache.get(normal, "👩‍💻").is_none());
         assert!(cache.clock.is_empty());
     }
+
     #[test]
     fn pressure_evicts_cold_entries_without_flushing_hot_entries() {
         let mut cache = TextCache::new(3);

@@ -6,20 +6,24 @@ pub enum Target {
     Editor,
     Terminal(u64),
 }
+
 #[derive(Default)]
 pub struct Pointer {
     position: Option<(f32, f32)>,
 }
+
 impl Pointer {
     pub fn reset(&mut self, position: (f32, f32)) {
         self.position = Some(position);
     }
+
     pub fn moved(&mut self, position: (f32, f32), permitted: bool) -> bool {
         let changed = self.position != Some(position);
         self.position = Some(position);
         changed && permitted
     }
 }
+
 pub fn target(
     position: (f32, f32),
     editor: Option<Rect>,
@@ -39,6 +43,7 @@ pub fn target(
                 .map(|_| Target::Editor)
         })
 }
+
 fn contains(rect: Rect, (x, y): (f32, f32)) -> bool {
     x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height
 }
@@ -46,6 +51,7 @@ fn contains(rect: Rect, (x, y): (f32, f32)) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn keyboard_focus_survives_stationary_events_and_suppressed_movement() {
         let mut pointer = Pointer::default();
@@ -59,6 +65,7 @@ mod tests {
         pointer.reset((200., 200.));
         assert!(!pointer.moved((200., 200.), true));
     }
+
     #[test]
     fn content_only_hit_testing_respects_tabs_dividers_and_hidden_panes() {
         let editor = Rect {

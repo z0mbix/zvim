@@ -1,6 +1,7 @@
 use rmpv::Value;
 use std::time::{Duration, Instant};
 use zvim::session::{Launch, Session};
+
 fn main() {
     for slow in [false, true] {
         for coalesce in [false, true] {

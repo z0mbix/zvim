@@ -128,11 +128,17 @@ impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for WaylandState {
 }
 
 delegate_noop!(WaylandState: ignore WlCompositor);
+
 delegate_noop!(WaylandState: ignore WlSubcompositor);
+
 delegate_noop!(WaylandState: ignore WlSubsurface);
+
 delegate_noop!(WaylandState: ignore WlSurface);
+
 delegate_noop!(WaylandState: ignore WlRegion);
+
 delegate_noop!(WaylandState: ignore WpViewporter);
+
 delegate_noop!(WaylandState: ignore WpViewport);
 
 struct WaylandEventWatcher {

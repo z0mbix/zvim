@@ -101,6 +101,7 @@ pub struct Editor {
     geometry_save_task: Option<Task<()>>,
     persistent_window: bool,
 }
+
 impl Editor {
     pub fn new(launch: Launch, window: &mut Window, cx: &mut Context<Self>) -> Self {
         zvim::startup::mark("editor_create");
@@ -229,6 +230,7 @@ impl Editor {
             persistent_window,
         }
     }
+
     fn apply_appearance(&mut self, window: &Window, cx: &mut Context<Self>) {
         if !self.appearance_ready {
             return;
@@ -244,6 +246,7 @@ impl Editor {
             self.applied_background = desired;
         }
     }
+
     fn sync_terminal_theme(&mut self, cx: &mut Context<Self>) {
         let _span = zvim::startup::Span::new("theme_sync_begin", "theme_sync_end");
         let theme = cx
@@ -266,6 +269,7 @@ impl Editor {
             }
         }
     }
+
     fn save(&self, window: &Window, cx: &App) {
         if !self.persistent_window
             || window.is_fullscreen()
@@ -290,11 +294,13 @@ impl Editor {
             y: Some(f32::from(bounds.origin.y)),
         });
     }
+
     fn close(&self) {
         if let Some(s) = &self.session {
             s.close();
         }
     }
+
     fn request_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.close_pending || self.close_requested {
             return;
@@ -305,6 +311,7 @@ impl Editor {
             self.confirm_terminal_close(CloseTarget::Editor, window, cx);
         }
     }
+
     fn hide_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         for (_, t) in self.terminals.iter() {
             t.update(cx, |t, _| t.set_visible(false));
@@ -317,6 +324,7 @@ impl Editor {
         window.refresh();
         cx.notify();
     }
+
     fn reveal_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.terminal_visible = true;
         self.sync_terminal_visibility(cx);
@@ -326,6 +334,7 @@ impl Editor {
         window.refresh();
         cx.notify();
     }
+
     fn toggle_terminal(&mut self, _: &ToggleTerminal, window: &mut Window, cx: &mut Context<Self>) {
         if self.close_pending || self.close_requested {
             return;
@@ -340,6 +349,7 @@ impl Editor {
             self.new_terminal(&NewTerminal, window, cx);
         }
     }
+
     fn focus_terminal(&mut self, _: &FocusTerminal, window: &mut Window, cx: &mut Context<Self>) {
         if self.close_pending || self.close_requested {
             return;
@@ -363,6 +373,7 @@ impl Editor {
             self.reveal_terminal(window, cx);
         }
     }
+
     fn select_terminal(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         if self.close_pending || self.close_requested || index >= self.terminals.len() {
             return;
@@ -374,6 +385,7 @@ impl Editor {
         self.scroll_terminal_tabs();
         self.reveal_terminal(window, cx);
     }
+
     fn cycle_all_terminals(&mut self, next: bool, window: &mut Window, cx: &mut Context<Self>) {
         if self.close_pending || self.close_requested {
             return;
@@ -383,6 +395,7 @@ impl Editor {
             self.reveal_terminal(window, cx);
         }
     }
+
     fn new_terminal(&mut self, _: &NewTerminal, window: &mut Window, cx: &mut Context<Self>) {
         if self.close_pending || self.close_requested {
             return;
@@ -393,6 +406,7 @@ impl Editor {
             cx,
         );
     }
+
     fn request_terminal(
         &mut self,
         target: TerminalSpawn,
@@ -409,6 +423,7 @@ impl Editor {
             self.spawn_terminal(self.terminal_cwd.clone(), target, window, cx);
         }
     }
+
     fn split_terminal(&mut self, axis: Axis, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(pane) = self.terminals.focused_pane() {
             self.request_terminal(TerminalSpawn::Split { pane, axis }, window, cx);
@@ -416,6 +431,7 @@ impl Editor {
             self.new_terminal(&NewTerminal, window, cx);
         }
     }
+
     fn sync_terminal_visibility(&self, cx: &mut Context<Self>) {
         let visible = self.terminals.visible_ids(self.terminal_maximized);
         for (id, terminal) in self.terminals.iter() {
@@ -424,6 +440,7 @@ impl Editor {
             });
         }
     }
+
     fn scroll_terminal_tabs(&self) {
         if let Some(pane) = self.terminals.focused_pane()
             && let Some(scroll) = self.terminal_tab_scroll.get(&pane)
@@ -431,6 +448,7 @@ impl Editor {
             scroll.scroll_to_item(self.terminals.active_index());
         }
     }
+
     fn follow_pointer(
         &mut self,
         event: &MouseMoveEvent,
@@ -484,6 +502,7 @@ impl Editor {
             _ => {}
         }
     }
+
     fn select_terminal_pane(&mut self, pane: u64, window: &mut Window, cx: &mut Context<Self>) {
         if self.close_pending || self.close_requested {
             return;
@@ -492,6 +511,7 @@ impl Editor {
             self.reveal_terminal(window, cx);
         }
     }
+
     fn navigate_terminal(
         &mut self,
         direction: Direction,
@@ -547,6 +567,7 @@ impl Editor {
         window.refresh();
         cx.notify();
     }
+
     fn show_terminal(&mut self, cwd: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         if self.close_pending || self.close_requested {
             return;
@@ -557,6 +578,7 @@ impl Editor {
             self.toggle_terminal(&ToggleTerminal, window, cx);
         }
     }
+
     fn spawn_terminal(
         &mut self,
         cwd: PathBuf,
@@ -637,6 +659,7 @@ impl Editor {
             }
         }
     }
+
     fn reap_exited_terminals(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         if self.close_pending {
             return false;
@@ -679,11 +702,13 @@ impl Editor {
         }
         false
     }
+
     fn close_terminal(&mut self, _: &CloseTerminal, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.terminals.active_id() {
             self.confirm_terminal_close(CloseTarget::Terminal(id), window, cx);
         }
     }
+
     fn finish_close(&mut self, target: CloseTarget, window: &mut Window, cx: &mut Context<Self>) {
         match target {
             CloseTarget::Editor => {
@@ -722,6 +747,7 @@ impl Editor {
             }
         }
     }
+
     fn confirm_terminal_close(
         &mut self,
         target: CloseTarget,
@@ -796,6 +822,7 @@ impl Editor {
         })
         .detach();
     }
+
     fn event(&mut self, event: Event, window: &mut Window, cx: &mut Context<Self>) {
         match event {
             Event::CloseReturned => {
@@ -886,6 +913,7 @@ impl Editor {
             }
         }
     }
+
     fn open(&mut self, _: &Open, window: &mut Window, cx: &mut Context<Self>) {
         let result = cx.prompt_for_paths(PathPromptOptions {
             files: true,
@@ -904,6 +932,7 @@ impl Editor {
         })
         .detach();
     }
+
     fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(terminal) = self.terminals.active()
             && terminal.read(cx).is_focused(window)
@@ -917,6 +946,7 @@ impl Editor {
             s.paste(text);
         }
     }
+
     fn key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         if !self.focus.is_focused(window) {
             return;
@@ -961,6 +991,7 @@ impl Editor {
             cx.stop_propagation();
         }
     }
+
     fn mouse(&self, button: &str, action: &str, pos: Point<Pixels>, mods: Modifiers) {
         if !self.grid.mouse {
             return;
@@ -994,6 +1025,7 @@ impl Editor {
             );
         }
     }
+
     fn wheel(&mut self, e: &ScrollWheelEvent, _: &mut Window, _: &mut Context<Self>) {
         let d = e.delta.pixel_delta(px(self.cell_height));
         self.scroll.y += f32::from(d.y) / self.cell_height;
@@ -1022,6 +1054,7 @@ impl Editor {
             }
         }
     }
+
     fn layout_grid(&mut self, bounds: Bounds<Pixels>, window: &mut Window) {
         self.bounds = bounds;
         let spec = format!("{}:{}", self.grid.guifont, self.grid.linespace);
@@ -1061,6 +1094,7 @@ impl Editor {
             }
         }
     }
+
     fn cell_bounds(&self, row: usize, col: usize, width: usize) -> Bounds<Pixels> {
         Bounds::new(
             self.bounds.origin
@@ -1071,6 +1105,7 @@ impl Editor {
             size(px(width as f32 * self.cell_width), px(self.cell_height)),
         )
     }
+
     fn text(
         &mut self,
         text: &str,
@@ -1088,6 +1123,7 @@ impl Editor {
         }
         .text(text, hl, colors, origin, window);
     }
+
     fn paint(&mut self, window: &mut Window, cx: &mut App) {
         let trace_first = self.first_paint && self.grid.width > 0;
         zvim::startup::mark(if trace_first {
@@ -1256,12 +1292,14 @@ impl Editor {
         });
     }
 }
+
 struct CellPainter<'a> {
     cache: &'a mut zvim::text_cache::TextCache<ShapedLine>,
     font: &'a Font,
     font_size: f32,
     cell_height: f32,
 }
+
 impl CellPainter<'_> {
     fn text(
         &mut self,
@@ -1375,6 +1413,7 @@ fn paint_cell_line(
         );
     }
 }
+
 fn default_font() -> &'static str {
     if cfg!(target_os = "macos") {
         "Menlo"
@@ -1382,6 +1421,7 @@ fn default_font() -> &'static str {
         "monospace"
     }
 }
+
 fn resolve_editor_font(spec: &str, text_system: &WindowTextSystem) -> (Font, f32) {
     // Probe only the requested families. Enumerating the entire OS font collection
     // here blocks the first frame, even when guifont is empty.
@@ -1401,6 +1441,7 @@ fn resolve_editor_font(spec: &str, text_system: &WindowTextSystem) -> (Font, f32
         .collect::<Vec<_>>();
     parse_font(spec, &available)
 }
+
 fn parse_font(spec: &str, available: &[String]) -> (Font, f32) {
     let choices: Vec<_> = spec
         .split(',')
@@ -1701,6 +1742,7 @@ impl Focusable for Editor {
         self.focus.clone()
     }
 }
+
 impl Render for Editor {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let _span = zvim::startup::Span::new("editor_render_begin", "editor_render_end");
@@ -1981,6 +2023,7 @@ impl Render for Editor {
             })
     }
 }
+
 fn resized_terminal_fraction(height: f32, fraction: f32, delta: f32) -> f32 {
     if height <= 0. {
         return fraction;
@@ -2000,24 +2043,31 @@ fn button_name(b: MouseButton) -> &'static str {
         _ => "left",
     }
 }
+
 struct GridElement {
     editor: Entity<Editor>,
 }
+
 impl IntoElement for GridElement {
     type Element = Self;
+
     fn into_element(self) -> Self {
         self
     }
 }
+
 impl Element for GridElement {
     type RequestLayoutState = ();
     type PrepaintState = ();
+
     fn id(&self) -> Option<ElementId> {
         None
     }
+
     fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
         None
     }
+
     fn request_layout(
         &mut self,
         _: Option<&GlobalElementId>,
@@ -2030,6 +2080,7 @@ impl Element for GridElement {
         style.size.height = relative(1.).into();
         (w.request_layout(style, [], cx), ())
     }
+
     fn prepaint(
         &mut self,
         _: Option<&GlobalElementId>,
@@ -2041,6 +2092,7 @@ impl Element for GridElement {
     ) {
         self.editor.update(cx, |v, _| v.layout_grid(bounds, w));
     }
+
     fn paint(
         &mut self,
         _: Option<&GlobalElementId>,
@@ -2060,6 +2112,7 @@ impl Element for GridElement {
         self.editor.update(cx, |v, cx| v.paint(w, cx));
     }
 }
+
 impl EntityInputHandler for Editor {
     fn text_for_range(
         &mut self,
@@ -2074,6 +2127,7 @@ impl EntityInputHandler for Editor {
         *actual = Some(start..end);
         Some(String::from_utf16_lossy(&units[start..end]))
     }
+
     fn selected_text_range(
         &mut self,
         _: bool,
@@ -2085,6 +2139,7 @@ impl EntityInputHandler for Editor {
             reversed: false,
         })
     }
+
     fn marked_text_range(&self, _: &mut Window, _: &mut Context<Self>) -> Option<Range<usize>> {
         if self.preedit.is_empty() {
             None
@@ -2092,11 +2147,13 @@ impl EntityInputHandler for Editor {
             Some(0..self.preedit.encode_utf16().count())
         }
     }
+
     fn unmark_text(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.preedit.clear();
         self.selection = 0..0;
         cx.notify();
     }
+
     fn replace_text_in_range(
         &mut self,
         _: Option<Range<usize>>,
@@ -2111,6 +2168,7 @@ impl EntityInputHandler for Editor {
         }
         cx.notify();
     }
+
     fn replace_and_mark_text_in_range(
         &mut self,
         range: Option<Range<usize>>,
@@ -2131,6 +2189,7 @@ impl EntityInputHandler for Editor {
             .unwrap_or(n..n);
         cx.notify();
     }
+
     fn bounds_for_range(
         &mut self,
         _: Range<usize>,
@@ -2140,6 +2199,7 @@ impl EntityInputHandler for Editor {
     ) -> Option<Bounds<Pixels>> {
         Some(self.cell_bounds(self.grid.cursor.row, self.grid.cursor.col, 1))
     }
+
     fn character_index_for_point(
         &mut self,
         _: Point<Pixels>,
@@ -2153,9 +2213,11 @@ impl EntityInputHandler for Editor {
 pub fn open_window(launch: Launch, cx: &mut App) {
     open_window_inner(launch, None, cx);
 }
+
 pub fn open_requested_window(request: zvim::instance::Incoming, cx: &mut App) {
     open_window_inner(request.launch.clone(), Some(request), cx);
 }
+
 fn open_window_inner(launch: Launch, request: Option<zvim::instance::Incoming>, cx: &mut App) {
     zvim::startup::mark("window_open_begin");
     crate::preferences::refresh(cx);
@@ -2223,6 +2285,7 @@ fn open_window_inner(launch: Launch, request: Option<zvim::instance::Incoming>, 
     zvim::startup::mark("window_open_end");
     cx.activate(true);
 }
+
 pub fn open_paths(paths: Vec<PathBuf>, cx: &mut App) {
     if let Some(window) = cx
         .windows()
@@ -2273,6 +2336,7 @@ pub fn request_close_all(cx: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::{FontStyle, FontWeight, parse_font, resized_terminal_fraction, split_height};
+
     #[test]
     fn keyboard_resize_clamps_and_can_reverse_at_limits() {
         let taller = resized_terminal_fraction(800., 0.4, 40.);
@@ -2287,6 +2351,7 @@ mod tests {
         assert_eq!(resized_terminal_fraction(100., 0.4, 40.), 0.5);
         assert_eq!(resized_terminal_fraction(0., 0.4, 40.), 0.4);
     }
+
     #[test]
     fn terminal_split_keeps_both_panes_visible() {
         assert_eq!(split_height(800., 0.4), 320.);
@@ -2295,12 +2360,14 @@ mod tests {
         assert_eq!(split_height(100., 0.9), 50.);
         assert_eq!(split_height(0., 0.4), 0.);
     }
+
     #[test]
     fn chooses_installed_font_in_neovim_preference_list() {
         let (font, size) = parse_font("Missing Font,Menlo:h18,monospace", &["Menlo".into()]);
         assert_eq!(font.family.as_ref(), "Menlo");
         assert_eq!(size, 18.);
     }
+
     #[test]
     fn applies_font_style_and_rejects_nonfinite_size() {
         let (font, size) = parse_font("Example_Mono:hNaN:b:i", &["Example Mono".into()]);

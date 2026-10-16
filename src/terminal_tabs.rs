@@ -87,6 +87,7 @@ impl<T> TerminalTabs<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn switching_retains_shells_and_wraps() {
         let mut tabs = TerminalTabs::default();
@@ -100,6 +101,7 @@ mod tests {
         assert_eq!(tabs.active(), Some(&"first"));
         assert_eq!(tabs.len(), 3);
     }
+
     #[test]
     fn closing_preserves_selection_and_ids() {
         let mut tabs = TerminalTabs::default();

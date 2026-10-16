@@ -5,6 +5,7 @@ pub struct LatestRequest<T> {
     latest: Arc<Mutex<Option<T>>>,
     wake: mpsc::SyncSender<()>,
 }
+
 impl<T: Send + 'static> LatestRequest<T> {
     pub fn new(mut apply: impl FnMut(T) -> bool + Send + 'static) -> Self {
         let latest = Arc::new(Mutex::new(None));
@@ -22,6 +23,7 @@ impl<T: Send + 'static> LatestRequest<T> {
         });
         Self { latest, wake }
     }
+
     pub fn submit(&self, value: T) {
         *self.latest.lock().unwrap() = Some(value);
         let _ = self.wake.try_send(());

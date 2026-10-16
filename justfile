@@ -35,7 +35,7 @@ run-clean *args:
         target/release/zvim --wait --clean "$@"
 
 check:
-    cargo fmt --check
+    cargo fmt --all --check
     cargo test --locked --all-targets
     cargo clippy --locked --all-targets -- -D warnings
 

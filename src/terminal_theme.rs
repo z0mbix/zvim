@@ -1,6 +1,7 @@
 /// Neovim's RGB colours. Missing entries preserve the original Ghostty setting.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TerminalTheme(pub [Option<u32>; 22]);
+
 impl TerminalTheme {
     pub fn from_value(value: &rmpv::Value) -> Option<Self> {
         let values = value.as_array()?;
@@ -68,6 +69,7 @@ pub struct ThemeConfigCache {
     input: Option<(Option<TerminalTheme>, u32, u32)>,
     pub config: Option<std::sync::Arc<str>>,
 }
+
 impl ThemeConfigCache {
     pub fn update(
         &mut self,
@@ -93,6 +95,7 @@ impl ThemeConfigCache {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn cached_theme_tracks_changes_and_restores_user_configuration() {
         let mut cache = ThemeConfigCache::default();
@@ -110,6 +113,7 @@ mod tests {
         assert!(!cache.update(None, 4, 5));
         assert!(cache.update(Some(&theme), 4, 5));
     }
+
     #[test]
     fn missing_colours_use_editor_defaults_and_leave_ansi_palette_alone() {
         let config = TerminalTheme([None; 22]).config(0xeeeeee, 0x111111);
@@ -119,6 +123,7 @@ mod tests {
         assert!(!config.contains("palette"));
         assert!(!config.contains("selection"));
     }
+
     #[test]
     fn rejects_invalid_palette_payloads() {
         assert!(TerminalTheme::from_value(&rmpv::Value::Array(vec![])).is_none());

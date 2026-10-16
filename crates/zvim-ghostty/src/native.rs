@@ -362,6 +362,7 @@ mod platform {
                 )
             }
         }
+
         pub fn search_status(&self) -> (isize, isize) {
             let (mut total, mut selected) = (-1, -1);
             // SAFETY: Called on the surface UI thread with valid output pointers.
@@ -370,6 +371,7 @@ mod platform {
             };
             (total, selected)
         }
+
         pub fn wakeup(&self) -> NativeWakeup {
             self.wakeup.clone()
         }
@@ -539,6 +541,7 @@ pub use platform::NativeSurface;
 mod linux;
 #[cfg(target_os = "linux")]
 mod wayland;
+
 #[cfg(target_os = "linux")]
 pub use linux::NativeSurface;
 
@@ -564,16 +567,23 @@ impl NativeSurface {
     pub fn wakeup(&self) -> NativeWakeup {
         NativeWakeup::new()
     }
+
     pub fn tick(&mut self) {}
+
     pub fn is_alive(&self) -> bool {
         false
     }
+
     pub(crate) fn snapshot(&mut self) -> Result<NativeSnapshot, String> {
         Err("native terminal snapshots require macOS or Wayland".to_owned())
     }
+
     pub fn set_frame(&mut self, _x: f64, _y: f64, _width: f64, _height: f64, _scale_factor: f64) {}
+
     pub fn set_visible(&mut self, _visible: bool) {}
+
     pub fn set_focus(&mut self, _focused: bool) {}
+
     pub fn key(
         &mut self,
         _action: KeyAction,
@@ -585,8 +595,11 @@ impl NativeSurface {
     ) -> bool {
         false
     }
+
     pub fn text(&mut self, _text: &CStr) {}
+
     pub fn mouse_position(&mut self, _x: f64, _y: f64, _modifiers: Modifiers) {}
+
     pub fn mouse_button(
         &mut self,
         _state: MouseState,
@@ -594,11 +607,15 @@ impl NativeSurface {
         _modifiers: Modifiers,
     ) {
     }
+
     pub fn mouse_scroll(&mut self, _x: f64, _y: f64, _precision: bool) {}
+
     pub(crate) fn take_clipboard_read(&mut self) -> Option<ClipboardRead> {
         None
     }
+
     pub(crate) fn complete_clipboard_read(&mut self, _request: ClipboardRead, _text: &CStr) {}
+
     pub fn take_clipboard_write(&mut self) -> Option<ClipboardWrite> {
         None
     }

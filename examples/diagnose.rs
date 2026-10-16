@@ -2,6 +2,7 @@
 use rmpv::Value;
 use std::time::{Duration, Instant};
 use zvim::session::{Event, Launch, Session};
+
 fn main() -> anyhow::Result<()> {
     let clean = !std::env::args().any(|a| a == "--config");
     let launch = Launch {

@@ -11,7 +11,9 @@ use gpui::{prelude::*, *};
 use gpui_libghostty::__private::{KeyAction, Modifiers, MouseButton, MouseState, NativeSurface};
 use gpui_libghostty::TerminalOptions;
 use std::ops::Range;
+
 actions!(terminal_search, [Find, NextMatch, PreviousMatch]);
+
 /// A GPUI entity backed by Ghostty's native Metal or Wayland/OpenGL surface.
 pub struct Terminal {
     surface: NativeSurface,
@@ -29,9 +31,11 @@ pub struct Terminal {
 }
 
 pub struct TerminalExited;
+
 impl gpui::EventEmitter<TerminalExited> for Terminal {}
 
 pub struct TerminalFocused;
+
 impl gpui::EventEmitter<TerminalFocused> for Terminal {}
 
 impl Terminal {
@@ -440,6 +444,7 @@ impl Terminal {
     pub(crate) fn search_status(&self) -> Option<(isize, isize)> {
         self.search.as_ref().map(|s| s.status)
     }
+
     fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let search = self.search.get_or_insert_with(Default::default);
         search.selection = 0..search.len();
@@ -447,6 +452,7 @@ impl Terminal {
         self.surface.set_focus(false);
         cx.notify();
     }
+
     fn update_search(&mut self, cx: &mut Context<Self>) {
         if let Some(search) = &mut self.search {
             search.status = (-1, -1);
@@ -456,12 +462,14 @@ impl Terminal {
         }
         cx.notify();
     }
+
     fn close_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.surface.binding_action("end_search");
         self.search = None;
         self.focus.focus(window);
         cx.notify();
     }
+
     fn search_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let key = &event.keystroke;
         if key.key == "escape" {
@@ -510,6 +518,7 @@ impl Terminal {
         cx.stop_propagation();
         cx.notify();
     }
+
     fn search_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let search = self.search.as_ref().unwrap();
         let text = search.text.clone();
@@ -673,6 +682,7 @@ impl EntityInputHandler for Terminal {
         *actual = Some(range.clone());
         Some(search.slice(range))
     }
+
     fn selected_text_range(
         &mut self,
         _: bool,
@@ -684,15 +694,18 @@ impl EntityInputHandler for Terminal {
             reversed: false,
         })
     }
+
     fn marked_text_range(&self, _: &mut Window, _: &mut Context<Self>) -> Option<Range<usize>> {
         self.search.as_ref()?.marked.clone()
     }
+
     fn unmark_text(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(s) = &mut self.search {
             s.marked = None;
         }
         cx.notify();
     }
+
     fn replace_text_in_range(
         &mut self,
         range: Option<Range<usize>>,
@@ -705,6 +718,7 @@ impl EntityInputHandler for Terminal {
         }
         self.update_search(cx);
     }
+
     fn replace_and_mark_text_in_range(
         &mut self,
         range: Option<Range<usize>>,
@@ -723,6 +737,7 @@ impl EntityInputHandler for Terminal {
         }
         self.update_search(cx);
     }
+
     fn bounds_for_range(
         &mut self,
         _: Range<usize>,
@@ -732,6 +747,7 @@ impl EntityInputHandler for Terminal {
     ) -> Option<Bounds<Pixels>> {
         Some(self.search.as_ref()?.bounds)
     }
+
     fn character_index_for_point(
         &mut self,
         _: Point<Pixels>,

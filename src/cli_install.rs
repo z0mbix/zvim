@@ -90,6 +90,7 @@ fn install(executable: &Path, directory: &Path) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn launcher_preserves_arguments_cwd_and_quoted_app_path() {
         let root = tempfile::tempdir().unwrap();
@@ -113,6 +114,7 @@ mod tests {
         );
         assert_eq!(install(&binary, &bin).unwrap(), launcher);
     }
+
     #[test]
     fn refuses_unrelated_files_directories_and_symlinks() {
         let root = tempfile::tempdir().unwrap();

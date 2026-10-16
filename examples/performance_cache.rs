@@ -10,23 +10,30 @@ use zvim::{
     terminal_theme::{TerminalTheme, ThemeConfigCache},
     text_cache::{TextCache, TextStyle},
 };
+
 struct Allocator;
+
 static ALLOCATIONS: AtomicU64 = AtomicU64::new(0);
+
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
         unsafe { System.alloc(layout) }
     }
+
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         unsafe { System.dealloc(ptr, layout) }
     }
+
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, size: usize) -> *mut u8 {
         ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
         unsafe { System.realloc(ptr, layout, size) }
     }
 }
+
 #[global_allocator]
 static ALLOCATOR: Allocator = Allocator;
+
 fn style(i: usize) -> TextStyle {
     TextStyle {
         foreground: (i % 16) as u32,
@@ -38,12 +45,14 @@ fn style(i: usize) -> TextStyle {
         strikethrough: false,
     }
 }
+
 fn old_key(text: &str, s: TextStyle) -> String {
     format!(
         "{text}\0{}:{}:{}:{}:{}:{}:{}",
         s.foreground, s.special, s.bold, s.italic, s.underline, s.undercurl, s.strikethrough
     )
 }
+
 fn measure(f: impl FnOnce()) -> serde_json::Value {
     let before = ALLOCATIONS.load(Ordering::Relaxed);
     let time = Instant::now();
@@ -52,6 +61,7 @@ fn measure(f: impl FnOnce()) -> serde_json::Value {
     let allocations = ALLOCATIONS.load(Ordering::Relaxed) - before;
     serde_json::json!({"milliseconds":elapsed.as_secs_f64()*1000.,"allocation_calls":allocations})
 }
+
 fn main() {
     let texts: Vec<_> = (0..256)
         .map(|i| char::from_u32(0x400 + i).unwrap().to_string())

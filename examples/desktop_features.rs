@@ -4,20 +4,26 @@
 mod terminal;
 #[path = "../src/terminal_search.rs"]
 mod terminal_search;
+
 extern crate zvim as _;
+
 #[cfg(target_os = "macos")]
 #[path = "support/menu_probe.rs"]
 mod menu_probe;
+
 use gpui::*;
 use std::time::Duration;
+
 struct Harness {
     terminal: Entity<terminal::Terminal>,
 }
+
 impl Render for Harness {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         self.terminal.clone()
     }
 }
+
 fn main() {
     terminal::configure_resources();
     Application::new().run(|cx| {

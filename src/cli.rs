@@ -13,6 +13,7 @@ pub enum Mode {
     Help,
     Version,
 }
+
 pub struct Cli {
     pub launch: Launch,
     pub mode: Mode,
@@ -187,9 +188,11 @@ pub const HELP: &str = "Zvim — a native Neovim frontend\nUsage: zvim [options]
 #[cfg(test)]
 mod tests {
     use super::*;
+
     fn args(values: &[&str]) -> Vec<OsString> {
         values.iter().map(OsString::from).collect()
     }
+
     #[test]
     fn preserves_flags_values_and_order() {
         let cwd = std::env::temp_dir();
@@ -208,6 +211,7 @@ mod tests {
         assert_eq!(cli.launch.nvim_args, input);
         assert_eq!(cli.launch.working_directory, Some(cwd));
     }
+
     #[test]
     fn directory_operand_changes_cwd_but_values_do_not() {
         let cwd = std::env::temp_dir().canonicalize().unwrap();
@@ -218,6 +222,7 @@ mod tests {
             args(&["--clean", "-u", ".", "-O", "one", "two"])
         );
     }
+
     #[test]
     fn options_end_marker_and_literal_filenames() {
         let cli = parse(
@@ -230,6 +235,7 @@ mod tests {
             args(&["--", "--headless", "+42", "--wait"])
         );
     }
+
     #[test]
     fn launcher_flags_do_not_reach_neovim() {
         let cli = parse(
@@ -247,6 +253,7 @@ mod tests {
             Mode::Detached
         );
     }
+
     #[test]
     fn rejects_incompatible_modes_and_missing_values() {
         for input in [

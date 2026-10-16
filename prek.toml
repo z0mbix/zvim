@@ -1,0 +1,10 @@
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "cargo-fmt"
+name = "Rust formatting"
+language = "system"
+entry = "cargo fmt --all"
+types = ["rust"]
+pass_filenames = false

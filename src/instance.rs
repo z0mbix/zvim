@@ -19,6 +19,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
+
 const LIMIT: usize = 1024 * 1024;
 const TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -30,6 +31,7 @@ pub struct Message {
     environment: Vec<(Vec<u8>, Vec<u8>)>,
     wait: bool,
 }
+
 impl Message {
     pub fn new(launch: &Launch, wait: bool) -> Result<Self> {
         Ok(Self {
@@ -52,6 +54,7 @@ impl Message {
             wait,
         })
     }
+
     fn launch(&self) -> Result<Launch> {
         if self.version != 1 {
             bail!("Incompatible running Zvim; quit it and reopen Zvim");
@@ -91,6 +94,7 @@ impl Message {
         })
     }
 }
+
 #[derive(Serialize, Deserialize)]
 enum Reply {
     Opened,
@@ -102,22 +106,27 @@ pub struct Incoming {
     pub launch: Launch,
     response: mpsc::Sender<Reply>,
 }
+
 impl Incoming {
     pub fn opened(self) -> Completion {
         let _ = self.response.send(Reply::Opened);
         Completion(self.response)
     }
+
     pub fn reject(self, error: String) {
         let _ = self.response.send(Reply::Error(error));
     }
 }
+
 /// Held by the requested editor view, not by the whole application.
 pub struct Completion(mpsc::Sender<Reply>);
+
 impl Drop for Completion {
     fn drop(&mut self) {
         let _ = self.0.send(Reply::Closed);
     }
 }
+
 fn write_message(stream: &mut UnixStream, message: &impl Serialize) -> Result<()> {
     let bytes = serde_json::to_vec(message)?;
     if bytes.len() > LIMIT {
@@ -127,6 +136,7 @@ fn write_message(stream: &mut UnixStream, message: &impl Serialize) -> Result<()
     stream.write_all(&bytes)?;
     Ok(())
 }
+
 fn read_message<T: DeserializeOwned>(stream: &mut UnixStream) -> Result<T> {
     let mut length = [0; 4];
     stream.read_exact(&mut length)?;
@@ -138,6 +148,7 @@ fn read_message<T: DeserializeOwned>(stream: &mut UnixStream) -> Result<T> {
     stream.read_exact(&mut bytes)?;
     Ok(serde_json::from_slice(&bytes)?)
 }
+
 pub fn forward(mut stream: UnixStream, message: &Message) -> Result<()> {
     stream.set_read_timeout(Some(TIMEOUT))?;
     stream.set_write_timeout(Some(TIMEOUT))?;
@@ -158,6 +169,7 @@ pub fn forward(mut stream: UnixStream, message: &Message) -> Result<()> {
     }
     Ok(())
 }
+
 pub fn connect(dir: &Path) -> Result<UnixStream> {
     let endpoint = std::fs::read(dir.join("instance.endpoint"))?;
     let path = PathBuf::from(std::ffi::OsString::from_vec(endpoint));
@@ -165,6 +177,7 @@ pub fn connect(dir: &Path) -> Result<UnixStream> {
     same_user(&stream)?;
     Ok(stream)
 }
+
 fn same_user(stream: &UnixStream) -> Result<()> {
     use std::os::fd::AsRawFd;
     #[cfg(target_os = "macos")]
@@ -201,11 +214,14 @@ fn same_user(stream: &UnixStream) -> Result<()> {
     }
     Ok(())
 }
+
 type Pending = Arc<(Mutex<HashMap<u64, mpsc::Sender<Reply>>>, Condvar)>;
+
 pub enum Role {
     Primary(Server),
     Secondary(UnixStream),
 }
+
 pub struct Server {
     pub requests: async_channel::Receiver<Incoming>,
     stop: Arc<AtomicBool>,
@@ -215,6 +231,7 @@ pub struct Server {
     _directory: tempfile::TempDir,
     _lock: File,
 }
+
 impl Server {
     pub fn acquire(dir: &Path) -> Result<Role> {
         std::fs::create_dir_all(dir)?;
@@ -322,6 +339,7 @@ impl Server {
         }))
     }
 }
+
 impl Drop for Server {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
@@ -342,12 +360,14 @@ impl Drop for Server {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     fn host(dir: &Path) -> Server {
         match Server::acquire(dir).unwrap() {
             Role::Primary(server) => server,
             _ => panic!("expected primary"),
         }
     }
+
     fn request(wait: bool) -> Message {
         Message::new(
             &Launch {
@@ -358,6 +378,7 @@ mod tests {
         )
         .unwrap()
     }
+
     #[test]
     fn second_launch_reuses_primary_and_stale_endpoint_recovers() {
         let dir = tempfile::tempdir().unwrap();
@@ -376,6 +397,7 @@ mod tests {
         assert!(connect(dir.path()).is_ok());
         drop(server);
     }
+
     #[test]
     fn wait_is_per_window_and_shutdown_completes_remaining_waiters() {
         let dir = tempfile::tempdir().unwrap();
@@ -400,6 +422,7 @@ mod tests {
         assert_eq!(outcomes.recv_timeout(TIMEOUT).unwrap(), (1, true));
         drop(completions);
     }
+
     #[test]
     fn wire_preserves_non_utf8_arguments_environment_and_rejects_invalid_input() {
         let mut message = request(false);
@@ -420,6 +443,7 @@ mod tests {
         a.write_all(&((LIMIT + 1) as u32).to_be_bytes()).unwrap();
         assert!(read_message::<Message>(&mut b).is_err());
     }
+
     #[test]
     fn failed_window_open_is_reported_to_launcher() {
         let dir = tempfile::tempdir().unwrap();

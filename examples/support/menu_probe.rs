@@ -1,14 +1,18 @@
 //! Read only the smoke-test process's AppKit objects, on its main thread.
 use std::ffi::{CStr, c_char, c_void};
+
 type Id = *mut c_void;
+
 unsafe extern "C" {
     fn objc_getClass(name: *const c_char) -> Id;
     fn sel_registerName(name: *const c_char) -> Id;
     fn objc_msgSend();
 }
+
 unsafe fn selector(name: &CStr) -> Id {
     unsafe { sel_registerName(name.as_ptr()) }
 }
+
 unsafe fn id(object: Id, name: &CStr) -> Id {
     unsafe {
         let send: unsafe extern "C" fn(Id, Id) -> Id =
@@ -16,6 +20,7 @@ unsafe fn id(object: Id, name: &CStr) -> Id {
         send(object, selector(name))
     }
 }
+
 unsafe fn integer(object: Id, name: &CStr) -> isize {
     unsafe {
         let send: unsafe extern "C" fn(Id, Id) -> isize =
@@ -23,6 +28,7 @@ unsafe fn integer(object: Id, name: &CStr) -> isize {
         send(object, selector(name))
     }
 }
+
 unsafe fn send_index(object: Id, sel: Id, index: isize) -> Id {
     unsafe {
         let send: unsafe extern "C" fn(Id, Id, isize) -> Id =
@@ -30,6 +36,7 @@ unsafe fn send_index(object: Id, sel: Id, index: isize) -> Id {
         send(object, sel, index)
     }
 }
+
 pub fn check() {
     // SAFETY: Each selector has the declared Objective-C ABI; objects belong to
     // this test application and remain alive on the calling AppKit main thread.
@@ -93,6 +100,7 @@ pub fn click(title: &str) {
         panic!("missing menu item {title}");
     }
 }
+
 pub fn minimised_count() -> usize {
     // SAFETY: The return signatures match NSArray and NSWindow methods.
     unsafe {

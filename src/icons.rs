@@ -6,6 +6,7 @@ pub struct AppIcon {
 }
 
 pub const DEFAULT_ICON_ID: &str = "neovim";
+
 pub static APP_ICONS: &[AppIcon] = &[AppIcon {
     id: DEFAULT_ICON_ID,
     label: "Neovim",
