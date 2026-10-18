@@ -6,6 +6,23 @@ A focused native frontend for Neovim, written in Rust with GPUI. Neovim owns edi
 
 **Platforms: macOS and Linux only.** macOS is exercised locally; Linux remains experimental. The native Ghostty terminal requires Wayland on Linux; the editor can still run on X11. See [validation](docs/VALIDATION.md).
 
+## Install with Homebrew
+
+The release workflow publishes stable macOS builds as a cask in
+[z0mbix/tap](https://github.com/z0mbix/homebrew-tap), alongside the tap's
+command-line formulae. After the first publishing run, install it with:
+
+```sh
+brew install --cask z0mbix/tap/zvim
+```
+
+The cask requires Apple Silicon and macOS 13 or newer, installs `Zvim.app` into
+`/Applications`, and includes Neovim and the Ghostty runtime. To install the
+`zvim` command, use **Settings → Command-line launcher** as described below.
+Update with `brew update` followed by `brew upgrade --cask z0mbix/tap/zvim`.
+The app is signed ad hoc and is not notarised; macOS may require you to allow
+its first launch in **System Settings → Privacy & Security**.
+
 ## Run on macOS
 
 Requires macOS 13 or newer, Rust 1.98.1, Xcode 26.3 (including its macOS SDK), Python 3, curl, and Zig 0.16.0. GPUI's runtime Metal shader compilation is enabled, so the separate Xcode Metal compiler component is not required.
@@ -153,7 +170,7 @@ Run the bundling step before tests. The integration tests use real bundled Neovi
 
 ## Linux
 
-CI builds macOS arm64/x86-64 and Linux x86-64. Releases currently publish macOS app bundles; Linux archives remain experimental build artifacts.
+CI builds macOS arm64 and Linux x86-64. Releases currently publish Apple Silicon macOS app bundles; Linux archives remain experimental build artifacts.
 
 - Linux: install the GPUI development dependencies listed in `docs/VALIDATION.md`; use `python3 scripts/bundle-neovim.py`, then `cargo build --release --locked` and `python3 scripts/package.py`. The archive contains `zvim`, `neovim/`, and a desktop entry. Keep the runtime beside the binary; add that directory to PATH before installing the desktop entry under `~/.local/share/applications`. Wayland and X11 editor backends are enabled. The Ghostty pane requires Wayland, EGL, OpenGL 4.3, libxml2 and libc++ 21 or newer.
 
@@ -186,6 +203,18 @@ SemVer tags containing a prerelease suffix publish as GitHub prereleases. The re
 is staged as a draft until all assets upload; failed jobs can be rerun.
 The macOS bundle version is derived from Cargo's version. Public signing and
 notarisation are not configured.
+
+After publishing a stable release, Actions updates `Casks/zvim.rb` in
+`z0mbix/homebrew-tap` from the downloaded release archive and its verified SHA-256.
+Prereleases do not update the cask. Tap publishing uses a separate job, so a failed
+tap update can be retried without rebuilding or removing the GitHub release.
+The **Publish Homebrew cask** workflow also accepts an existing release tag;
+only the latest published stable release is accepted to prevent downgrades.
+
+Publishing requires a dedicated write-enabled deploy key on `z0mbix/homebrew-tap`,
+with its private key stored as the `HOMEBREW_TAP_SSH_KEY` Actions secret in
+`z0mbix/zvim`. Use a separate key for each publishing repository. The normal
+`GITHUB_TOKEN` can read Zvim releases but cannot write to another repository.
 
 For an optimised development launch, use `just run-release`. See [performance measurements and reproduction](docs/PERFORMANCE.md) for the rendering/cache benchmarks.
 
