@@ -25,21 +25,33 @@ its first launch in **System Settings → Privacy & Security**.
 
 ## Run on macOS
 
-Requires macOS 13 or newer, Rust 1.98.1, Xcode 26.3 (including its macOS SDK), Python 3, curl, and Zig 0.16.0. GPUI's runtime Metal shader compilation is enabled, so the separate Xcode Metal compiler component is not required.
+Requires macOS 13 or newer, Xcode 26.3 (including its macOS SDK), Python 3, curl, and [mise](https://mise.jdx.dev/getting-started.html). GPUI's runtime Metal shader compilation is enabled, so the separate Xcode Metal compiler component is not required.
+
+Install the pinned build tools once per checkout:
+
+```sh
+mise trust .config/mise.toml
+mise install
+```
+
+`.config/mise.toml` selects Zig 0.16.0 and reads Rust 1.98.1, rustfmt and Clippy
+from `rust-toolchain.toml`. The `just` build recipes use `mise exec` automatically,
+so they work without activating mise in your shell and do not use Homebrew's Zig.
+For direct Cargo commands, use `mise exec -- cargo …`:
 
 ```sh
 python3 scripts/bundle-neovim.py
-cargo build --locked
-python3 scripts/bundle-ghostty.py
-cargo run --locked -- --clean
-cargo run --locked -- path/to/file.rs
+mise exec -- cargo build --locked
+mise exec -- python3 scripts/bundle-ghostty.py
+mise exec -- cargo run --locked -- --clean
+mise exec -- cargo run --locked -- path/to/file.rs
 ```
 
 The first command downloads Neovim 0.12.5 from its official release and verifies the SHA-256 in `packaging/neovim.json`. No system Neovim is required. The entire runtime is bundled, not just the executable.
 
 ```sh
-cargo build --release --locked
-python3 scripts/package.py
+mise exec -- cargo build --release --locked
+mise exec -- python3 scripts/package.py
 open dist/zvim-macos-arm64/Zvim.app
 ```
 
@@ -162,9 +174,9 @@ files, review and stage those changes before retrying the commit. To format ever
 manually, run `cargo fmt --all`.
 
 ```sh
-cargo fmt --all --check
-cargo test --locked --all-targets
-cargo clippy --locked --all-targets -- -D warnings
+mise exec -- cargo fmt --all --check
+mise exec -- cargo test --locked --all-targets
+mise exec -- cargo clippy --locked --all-targets -- -D warnings
 ```
 
 Run the bundling step before tests. The integration tests use real bundled Neovim with isolated state. `--no-default-features` runs the protocol/process tests without compiling a GUI. `just check`, `just run`, and `just package` are optional shortcuts.
@@ -173,7 +185,7 @@ Run the bundling step before tests. The integration tests use real bundled Neovi
 
 CI builds macOS arm64 and Linux x86-64. Releases currently publish Apple Silicon macOS app bundles; Linux archives remain experimental build artifacts.
 
-- Linux: install the GPUI development dependencies listed in `docs/VALIDATION.md`; use `python3 scripts/bundle-neovim.py`, then `cargo build --release --locked` and `python3 scripts/package.py`. The archive contains `zvim`, `neovim/`, and a desktop entry. Keep the runtime beside the binary; add that directory to PATH before installing the desktop entry under `~/.local/share/applications`. Wayland and X11 editor backends are enabled. The Ghostty pane requires Wayland, EGL, OpenGL 4.3, libxml2 and libc++ 21 or newer.
+- Linux: install the pinned tools with mise as above, plus the GPUI development dependencies listed in `docs/VALIDATION.md`; use `python3 scripts/bundle-neovim.py`, then `mise exec -- cargo build --release --locked` and `mise exec -- python3 scripts/package.py`. The archive contains `zvim`, `neovim/`, and a desktop entry. Keep the runtime beside the binary; add that directory to PATH before installing the desktop entry under `~/.local/share/applications`. Wayland and X11 editor backends are enabled. The Ghostty pane requires Wayland, EGL, OpenGL 4.3, libxml2 and libc++ 21 or newer.
 
 ## Architecture and limitations
 
@@ -188,7 +200,7 @@ Original Zvim code is Apache-2.0. GPUI is used as a pinned library; no Zed edito
 Download builds from [GitHub Releases](https://github.com/z0mbix/zvim/releases).
 Versions follow SemVer, starting at **0.0.1**. To publish a release:
 
-1. Update the package version in `Cargo.toml` and refresh `Cargo.lock` with `cargo check`.
+1. Update the package version in `Cargo.toml` and refresh `Cargo.lock` with `mise exec -- cargo check`.
 2. Update `docs/RELEASE_NOTES.md`, run the checks, and commit the changes.
 3. Push the commit and a matching annotated tag, for example:
 

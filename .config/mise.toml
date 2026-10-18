@@ -1,0 +1,12 @@
+[tools]
+zig = "0.16.0"
+
+[settings]
+# Read Rust's version, profile, rustfmt and Clippy from rust-toolchain.toml.
+idiomatic_version_file_enable_tools = ["rust"]
+# Keep the pinned tools ahead of inherited Homebrew paths, including in builds.
+activate_aggressive = true
+
+[env]
+# gpui-libghostty honours ZIG before PATH; use mise's selected compiler.
+ZIG = "zig"

@@ -4,7 +4,16 @@ Zvim targets macOS and Linux. The terminal uses Ghostty's native Metal renderer 
 
 ## Build and packaging
 
-The pinned native renderer requires macOS 13 or newer. Install Zig 0.16.0 in addition to the existing Rust toolchain. Build with `cargo build --locked`, then run `python3 scripts/bundle-ghostty.py`. `just run` stages resources automatically. `scripts/package.py` stages and ships themes, shell integration, the xterm-256color terminfo entry used by the native shim, and native dependency notices. The first native compilation downloads content-pinned Zig packages. Native build caches follow gpui-libghostty's `GHOSTTY_*_CACHE_DIR` settings; preserve the same settings when packaging. No installed Ghostty application is needed.
+The pinned native renderer requires macOS 13 or newer and exactly Zig 0.16.0.
+Run `mise trust .config/mise.toml` and `mise install` to install the pinned Zig
+and Rust toolchains, including rustfmt and Clippy. `just` build recipes select
+these tools automatically. For direct builds, use `mise exec -- cargo build --locked`,
+then run `mise exec -- python3 scripts/bundle-ghostty.py`. `just run` stages resources automatically.
+`scripts/package.py` stages and ships themes, shell integration, the xterm-256color
+terminfo entry used by the native shim, and native dependency notices. The first
+native compilation downloads content-pinned Zig packages. Native build caches
+follow gpui-libghostty's `GHOSTTY_*_CACHE_DIR` settings; preserve the same settings
+when packaging. No installed Ghostty application is needed.
 
 `gpui-libghostty` is pinned to bfa3771f0ef2290e54acf9f1fc11e05d42a882ee, including its patched Ghostty revision 9f0e1719dc918368367d368bfe300f59bb68b5a4. Zvim uses a local MIT-derived adapter for GPUI 0.2.2 and the small `crates/zvim-ghostty` bridge for live colour updates; the upstream dependency still builds the pinned native engine. The library's internal native wrapper is deliberately revision-pinned; upgrades require rebuilding and repeating interaction QA.
 
@@ -30,9 +39,9 @@ On Ubuntu 24.04, `scripts/linux-dependencies.sh` installs the development librar
 
 ## Validation
 
-The real-Neovim test checks `:ZvimTerminal` notifications with a quoted, window-local cwd and verifies that built-in terminal buffers still work. The theme integration test covers direct highlight updates, colour-scheme events, reverse selection colours, palette removal and Base46 reloads. After `cargo build --locked` and staging resources, `python3 scripts/test-terminal-theme.py` opens a temporary macOS test window and verifies rendered background changes and restoration while retaining the live surface, output and input. macOS runtime checks and final build results are recorded in `docs/VALIDATION.md`.
+The real-Neovim test checks `:ZvimTerminal` notifications with a quoted, window-local cwd and verifies that built-in terminal buffers still work. The theme integration test covers direct highlight updates, colour-scheme events, reverse selection colours, palette removal and Base46 reloads. After `mise exec -- cargo build --locked` and staging resources, `python3 scripts/test-terminal-theme.py` opens a temporary macOS test window and verifies rendered background changes and restoration while retaining the live surface, output and input. macOS runtime checks and final build results are recorded in `docs/VALIDATION.md`.
 
-With the British keyboard layout active, `cargo run --locked --example terminal_keyboard -- kitty` opens a disposable macOS window, sends native Option+3 press/repeat/release events, and checks that its child process receives exactly `##`. Repeat with `legacy` and `modify-other-keys` to check those modes. It uses a temporary directory and only its own window and shell.
+With the British keyboard layout active, `mise exec -- cargo run --locked --example terminal_keyboard -- kitty` opens a disposable macOS window, sends native Option+3 press/repeat/release events, and checks that its child process receives exactly `##`. Repeat with `legacy` and `modify-other-keys` to check those modes. It uses a temporary directory and only its own window and shell.
 
 ## Pane shortcuts
 
@@ -117,7 +126,7 @@ The isolated native regression opens its own windows, projects, editor state and
 shells without changing the user's preferences:
 
 ```sh
-cargo build --locked --example project_terminals
-python3 scripts/bundle-ghostty.py
+mise exec -- cargo build --locked --example project_terminals
+mise exec -- python3 scripts/bundle-ghostty.py
 SHELL=/bin/sh target/debug/examples/project_terminals
 ```
