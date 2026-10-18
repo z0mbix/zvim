@@ -74,6 +74,7 @@ pub struct Preferences {
     pub theme: Theme,
     pub sync_editor_appearance: bool,
     pub terminal_follow_neovim: bool,
+    pub remember_terminal_layouts: bool,
     pub terminal_toggle_key: String,
     pub terminal_maximize_key: String,
     pub terminal_grow_key: String,
@@ -101,6 +102,7 @@ impl Default for Preferences {
             theme: Theme::System,
             sync_editor_appearance: false,
             terminal_follow_neovim: true,
+            remember_terminal_layouts: false,
             terminal_toggle_key: "cmd-shift-.".into(),
             terminal_maximize_key: "cmd-shift-enter".into(),
             terminal_grow_key: "cmd-shift-up".into(),
@@ -287,6 +289,7 @@ mod tests {
     #[test]
     fn preferences_preserve_defaults_and_follow_system() {
         let p: Preferences = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
+        assert!(!Preferences::default().remember_terminal_layouts);
         assert!(p.remember_window_geometry);
         assert_eq!(p.app_icon, crate::icons::DEFAULT_ICON_ID);
         assert!(!p.sync_editor_appearance);
@@ -330,6 +333,7 @@ mod tests {
             theme: Theme::Light,
             remember_window_geometry: false,
             focus_follows_mouse: true,
+            remember_terminal_layouts: true,
             sync_editor_appearance: true,
             terminal_follow_neovim: false,
             terminal_toggle_key: "alt-t".into(),

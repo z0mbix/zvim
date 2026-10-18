@@ -16,6 +16,15 @@ impl<T> Default for TerminalTabs<T> {
 }
 
 impl<T> TerminalTabs<T> {
+    pub(crate) fn from_saved(entries: Vec<(u64, T)>, active: usize) -> Self {
+        let next_id = entries.iter().map(|(id, _)| *id).max().unwrap_or(0) + 1;
+        Self {
+            entries,
+            active,
+            next_id,
+        }
+    }
+
     pub fn active(&self) -> Option<&T> {
         self.entries.get(self.active).map(|(_, value)| value)
     }

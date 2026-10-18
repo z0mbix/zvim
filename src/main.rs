@@ -134,6 +134,7 @@ fn run() -> anyhow::Result<()> {
         cx.on_app_quit(|cx| {
             cx.background_executor().spawn(async {
                 zvim::geometry_writer::flush();
+                zvim::terminal_workspace::flush();
             })
         })
         .detach();

@@ -1,3 +1,6 @@
+#[path = "ui_workspaces.rs"]
+mod workspaces;
+
 use gpui::{prelude::*, *};
 use std::{collections::HashMap, ops::Range, path::PathBuf};
 use zvim::{
@@ -58,6 +61,14 @@ enum TerminalSpawn {
 }
 
 pub struct Editor {
+    project_root: Option<PathBuf>,
+    reported_project: Option<PathBuf>,
+    workspaces: HashMap<PathBuf, workspaces::Workspace>,
+    workspace_mode: bool,
+    workspace_allowed: bool,
+    workspace_restore_failed: bool,
+    workspace_generation: u64,
+    workspace_directory: PathBuf,
     terminals: zvim::terminal_layout::TerminalLayout<Entity<crate::terminal::Terminal>>,
     terminal_cwd: PathBuf,
     terminal_tab_scroll: HashMap<u64, ScrollHandle>,
@@ -66,7 +77,7 @@ pub struct Editor {
     terminal_hover_regions: Vec<(u64, zvim::terminal_layout::Rect)>,
     terminal_hover_exclusions: Vec<zvim::terminal_layout::Rect>,
     terminal_split_drag: Option<(u64, f32)>,
-    pending_terminals: std::collections::VecDeque<TerminalSpawn>,
+    pending_terminals: std::collections::VecDeque<(u64, TerminalSpawn)>,
     terminal_visible: bool,
     terminal_fraction: f32,
     terminal_maximized: bool,
@@ -106,6 +117,17 @@ impl Editor {
     pub fn new(launch: Launch, window: &mut Window, cx: &mut Context<Self>) -> Self {
         zvim::startup::mark("editor_create");
         let persistent_window = launch.state_directory.is_none();
+        let workspace_directory = launch
+            .state_directory
+            .as_ref()
+            .map_or_else(zvim::terminal_workspace::directory, |root| {
+                root.join("terminal-layouts")
+            });
+        let workspace_mode = !launch.clean
+            && cx
+                .global::<crate::preferences::AppPreferences>()
+                .0
+                .remember_terminal_layouts;
         let started = std::time::Instant::now();
         let focus = cx.focus_handle();
         window.focus(&focus);
@@ -141,6 +163,7 @@ impl Editor {
             .detach();
         }
         cx.observe_global_in::<crate::preferences::AppPreferences>(window, |v, w, cx| {
+            v.update_workspace_preference(w, cx);
             v.apply_appearance(w, cx);
             v.sync_terminal_theme(cx);
             cx.notify();
@@ -153,7 +176,9 @@ impl Editor {
                 f32::from(window.mouse_position().x),
                 f32::from(window.mouse_position().y),
             ));
-            crate::preferences::refresh(cx);
+            if view.persistent_window {
+                crate::preferences::refresh(cx);
+            }
         })
         .detach();
         cx.observe_window_bounds(window, |view, window, cx| {
@@ -169,7 +194,7 @@ impl Editor {
         window.on_window_should_close(cx, move |window, cx| {
             weak.update(cx, |v, cx| {
                 v.save(window, cx);
-                if (v.exited || v.session.is_none()) && v.terminals.is_empty() {
+                if (v.exited || v.session.is_none()) && v.all_terminals().next().is_none() {
                     true
                 } else {
                     v.request_close(window, cx);
@@ -179,6 +204,14 @@ impl Editor {
             .unwrap_or(true)
         });
         Self {
+            project_root: None,
+            reported_project: None,
+            workspaces: HashMap::new(),
+            workspace_mode,
+            workspace_allowed: !launch.clean,
+            workspace_restore_failed: false,
+            workspace_generation: 0,
+            workspace_directory,
             terminals: Default::default(),
             terminal_cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")),
             terminal_tab_scroll: HashMap::new(),
@@ -271,6 +304,7 @@ impl Editor {
     }
 
     fn save(&self, window: &Window, cx: &App) {
+        self.save_terminal_layouts(cx);
         if !self.persistent_window
             || window.is_fullscreen()
             || !cx
@@ -320,6 +354,7 @@ impl Editor {
         self.terminal_split_drag = None;
         self.terminal_maximized = false;
         self.terminal_drag = None;
+        self.save_terminal_layouts(cx);
         window.focus(&self.focus);
         window.refresh();
         cx.notify();
@@ -328,6 +363,7 @@ impl Editor {
     fn reveal_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.terminal_visible = true;
         self.sync_terminal_visibility(cx);
+        self.save_terminal_layouts(cx);
         if let Some(t) = self.terminals.active() {
             t.update(cx, |t, cx| t.focus(window, cx));
         }
@@ -417,7 +453,8 @@ impl Editor {
             return;
         }
         if let Some(session) = &self.session {
-            self.pending_terminals.push_back(target);
+            self.pending_terminals
+                .push_back((self.workspace_generation, target));
             session.new_terminal();
         } else {
             self.spawn_terminal(self.terminal_cwd.clone(), target, window, cx);
@@ -541,6 +578,7 @@ impl Editor {
             self.terminal_fraction,
             delta,
         );
+        self.save_terminal_layouts(cx);
         window.refresh();
         cx.notify();
     }
@@ -561,6 +599,7 @@ impl Editor {
             self.terminal_maximized = !self.terminal_maximized;
         }
         self.sync_terminal_visibility(cx);
+        self.save_terminal_layouts(cx);
         if let Some(terminal) = self.terminals.active() {
             terminal.update(cx, |t, cx| t.focus(window, cx));
         }
@@ -596,14 +635,7 @@ impl Editor {
         if target_pane.is_some_and(|pane| self.terminals.pane(pane).is_none()) {
             return;
         }
-        let shell = std::env::var("SHELL")
-            .ok()
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "/bin/sh".into());
-        let command = format!("'{}' -l", shell.replace('\'', "'\\''"));
-        let mut options = gpui_libghostty::TerminalOptions::new(command, cwd.clone());
-        options.configuration = gpui_libghostty::TerminalConfiguration::UserDefault;
-        match crate::terminal::Terminal::spawn(options, window, cx) {
+        match self.create_terminal(cwd.clone(), true, window, cx) {
             Ok(t) => {
                 let terminal = t.clone();
                 let id = match target {
@@ -620,28 +652,8 @@ impl Editor {
                             .expect("target pane exists")
                     }
                 };
-                cx.subscribe_in(
-                    &terminal,
-                    window,
-                    move |view, _, _: &crate::terminal::TerminalFocused, _, cx| {
-                        if !view.close_pending
-                            && view.terminals.active_id() != Some(id)
-                            && view.terminals.focus_terminal(id)
-                        {
-                            view.sync_terminal_visibility(cx);
-                            cx.notify();
-                        }
-                    },
-                )
-                .detach();
-                cx.subscribe_in(
-                    &terminal,
-                    window,
-                    |view, _, _: &crate::terminal::TerminalExited, window, cx| {
-                        view.reap_exited_terminals(window, cx);
-                    },
-                )
-                .detach();
+                self.subscribe_terminal(id, &terminal, window, cx);
+                self.workspace_restore_failed = false;
                 self.terminal_cwd = cwd;
                 self.scroll_terminal_tabs();
                 self.sync_terminal_theme(cx);
@@ -664,6 +676,8 @@ impl Editor {
         if self.close_pending {
             return false;
         }
+        self.reap_background_terminals(cx);
+        self.save_terminal_layouts(cx);
         let exited: Vec<_> = self
             .terminals
             .iter()
@@ -671,6 +685,14 @@ impl Editor {
             .map(|(id, terminal)| (*id, terminal.read(cx).is_focused(window)))
             .collect();
         if exited.is_empty() {
+            if self.exited
+                && self.terminals.is_empty()
+                && !self.reveal_remaining_project(window, cx)
+            {
+                window.remove_window();
+                return true;
+            }
+            cx.notify();
             return false;
         }
         let restore_focus = exited.iter().any(|(_, focused)| *focused);
@@ -685,6 +707,9 @@ impl Editor {
         if self.terminals.is_empty() {
             self.hide_terminal(window, cx);
             if self.exited {
+                if self.reveal_remaining_project(window, cx) {
+                    return false;
+                }
                 window.remove_window();
                 return true;
             }
@@ -700,6 +725,7 @@ impl Editor {
             window.refresh();
             cx.notify();
         }
+        self.save_terminal_layouts(cx);
         false
     }
 
@@ -712,6 +738,7 @@ impl Editor {
     fn finish_close(&mut self, target: CloseTarget, window: &mut Window, cx: &mut Context<Self>) {
         match target {
             CloseTarget::Editor => {
+                self.save_terminal_layouts(cx);
                 self.exit_confirmed = true;
                 self.close_requested = true;
                 self.close_restore_terminal_focus = self
@@ -733,7 +760,7 @@ impl Editor {
                     .retain(|pane, _| self.terminals.pane(*pane).is_some());
                 if self.terminals.is_empty() {
                     self.hide_terminal(window, cx);
-                    if self.exited {
+                    if self.exited && !self.reveal_remaining_project(window, cx) {
                         window.remove_window();
                     }
                 } else {
@@ -742,9 +769,23 @@ impl Editor {
                 }
             }
             CloseTarget::Window => {
+                self.save_terminal_layouts(cx);
+                self.workspaces.clear();
                 self.terminals = Default::default();
                 window.remove_window();
             }
+        }
+    }
+
+    fn terminal_close_needs_confirmation(&self, target: CloseTarget, cx: &App) -> bool {
+        match target {
+            CloseTarget::Terminal(id) => self
+                .terminals
+                .iter()
+                .any(|(tab, terminal)| *tab == id && terminal.read(cx).needs_confirm_quit()),
+            _ => self
+                .all_terminals()
+                .any(|(_, terminal)| terminal.read(cx).needs_confirm_quit()),
         }
     }
 
@@ -757,13 +798,7 @@ impl Editor {
         if self.close_pending {
             return;
         }
-        let needs_confirmation = self.terminals.iter().any(|(id, t)| {
-            let included = match target {
-                CloseTarget::Terminal(target) => *id == target,
-                _ => true,
-            };
-            included && t.read(cx).needs_confirm_quit()
-        });
+        let needs_confirmation = self.terminal_close_needs_confirmation(target, cx);
         if !needs_confirmation {
             self.finish_close(target, window, cx);
             return;
@@ -786,7 +821,7 @@ impl Editor {
         let answer = window.prompt(
             PromptLevel::Warning,
             if closing_editor { if self.exited { "Close the remaining terminals?" } else { "Close window and stop terminal processes?" } } else { "Stop terminal processes?" },
-            Some("Closing a terminal stops its shell and running programs. Closing the window stops every terminal tab, including hidden tabs."),
+            Some("Closing a terminal stops its shell and running programs. Closing the window stops every terminal tab, including hidden tabs and other projects."),
             &[if self.exited { "Keep Terminal" } else { "Cancel" }, if closing_editor { "Close Window" } else { "Close Terminal" }],
             cx,
         );
@@ -809,12 +844,16 @@ impl Editor {
                 if confirmed {
                     v.finish_close(target, w, cx);
                 } else if v.exited
+                    && v.reveal_remaining_project(w, cx)
                     && let Some(terminal) = v.terminals.active()
                 {
                     let terminal = terminal.clone();
                     v.terminal_visible = true;
                     v.sync_terminal_visibility(cx);
                     terminal.update(cx, |terminal, cx| terminal.focus(w, cx));
+                }
+                if !v.exited {
+                    v.switch_reported_project(w, cx);
                 }
                 w.refresh();
                 cx.notify();
@@ -825,6 +864,10 @@ impl Editor {
 
     fn event(&mut self, event: Event, window: &mut Window, cx: &mut Context<Self>) {
         match event {
+            Event::Project(root) => {
+                self.reported_project = Some(root);
+                self.switch_reported_project(window, cx);
+            }
             Event::CloseReturned => {
                 self.exit_confirmed = false;
                 self.close_requested = false;
@@ -835,6 +878,7 @@ impl Editor {
                     terminal.update(cx, |terminal, cx| terminal.focus(window, cx));
                 }
                 self.close_restore_terminal_focus = false;
+                self.switch_reported_project(window, cx);
                 cx.notify();
             }
             Event::TerminalTheme(theme) => {
@@ -843,7 +887,9 @@ impl Editor {
             }
             Event::Terminal(cwd) => self.show_terminal(cwd, window, cx),
             Event::NewTerminal(cwd) => {
-                if let Some(target) = self.pending_terminals.pop_front() {
+                if let Some((generation, target)) = self.pending_terminals.pop_front()
+                    && generation == self.workspace_generation
+                {
                     self.spawn_terminal(cwd, target, window, cx);
                 }
             }
@@ -1746,7 +1792,10 @@ impl Focusable for Editor {
 impl Render for Editor {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let _span = zvim::startup::Span::new("editor_render_begin", "editor_render_end");
-        let height = window.viewport_size().height;
+        let show_workspace_bar = self.workspace_mode && self.project_root.is_some();
+        let workspace_bar = show_workspace_bar.then(|| self.render_workspace_bar(cx));
+        let height =
+            window.viewport_size().height - if show_workspace_bar { px(24.) } else { px(0.) };
         let terminal_height = if self.terminal_visible {
             if self.exited || self.terminal_maximized {
                 height
@@ -1829,6 +1878,10 @@ impl Render for Editor {
             .flex()
             .flex_col()
             .key_context("ZvimWindow")
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|view, _: &MouseUpEvent, _, cx| view.save_terminal_layouts(cx)),
+            )
             .on_action(cx.listener(Self::open))
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::toggle_terminal))
@@ -1905,6 +1958,7 @@ impl Render for Editor {
                                 let _ = view.update(cx, |v, cx| {
                                     let split_drag = v.terminal_split_drag.take().is_some();
                                     if v.terminal_drag.take().is_some() || split_drag {
+                                        v.save_terminal_layouts(cx);
                                         cx.stop_propagation();
                                         cx.notify();
                                     }
@@ -1956,6 +2010,7 @@ impl Render for Editor {
                 }),
             )
             .on_action(cx.listener(|v, _: &Close, w, cx| v.request_close(w, cx)))
+            .when_some(workspace_bar, |root, bar| root.child(bar))
             .when(terminal_height < height, |root| {
                 root.child(
                     div()

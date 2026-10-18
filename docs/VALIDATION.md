@@ -2,6 +2,15 @@
 
 Zvim targets macOS and Linux only. Linux runtime behaviour still requires validation.
 
+## Project terminal workspaces (2026-10-18, macOS arm64)
+
+- The full application/library/real-Neovim suite passes (43 library, 11 app and 10 Neovim integration tests), together with example tests and strict all-target Clippy.
+- Saved-layout tests cover nested topology, pane/tab selection, stable terminal IDs, rejection before spawning on corrupt input, per-project isolation, atomic persistence and private file modes.
+- Real Neovim tests exercise global directory changes, ignored `:lcd`, explicit project overrides, return to cwd following, and invalid project roots.
+- `examples/project_terminals.rs` opens disposable native windows with temporary projects and state. It verifies real Neovim project notifications, A → B → A with the same live shell entities/PID, a running hidden project's inclusion in close checks, deferred switching during close state, layout and tracked-directory restoration with fresh shells, background shell exit cleanup, missing-directory fallback and disabled persistence.
+- The diagnostic uses its own in-memory preferences; activating its windows does not reload the user's preferences. Normal application windows continue refreshing preferences on activation.
+- The native close-check predicate and deferred-switch state are exercised; the full interactive prompt sequence still needs manual UI confirmation. Linux/Wayland workspace runtime behaviour remains unverified.
+
 ## Option-generated terminal text (2026-10-15, macOS arm64)
 
 - Reproduced with native AppKit Option+3 events on the British keyboard layout and Kitty keyboard disambiguation enabled: the child process received `ESC [ 51 ; 3 u` (Alt+3) instead of `#`. Marking Option as consumed by the generated text fixes this.

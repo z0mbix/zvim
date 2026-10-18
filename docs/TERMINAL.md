@@ -17,7 +17,7 @@ On Ubuntu 24.04, `scripts/linux-dependencies.sh` installs the development librar
 - Foreground, background, cursor, selection and the 16 ANSI colours follow Neovim where defined. Missing ANSI and selection entries use the terminal's original Ghostty configuration. Neovim schemes that leave stale terminal globals themselves retain those values; Base46 uses its active `base_16` palette because its reload does not always refresh those globals.
 - Standard `ColorScheme`, `background` changes, NvChad's `NvThemeReload` and redraw highlight changes trigger a debounced palette read. Identical palettes are ignored. There is no periodic polling and no modification of user configuration files. Direct changes to terminal globals alone need `:doautocmd ColorScheme` to publish them.
 - User Ghostty fonts, shell settings and keybindings load at shell creation. Changing those files requires closing and recreating the terminal. Switching back to Use Ghostty theme restores that terminal's original configuration. Bundled resources take precedence over an inherited `GHOSTTY_RESOURCES_DIR`.
-- Multiple terminal panes with independent shell tabs, in a dock initially at 40% height. Drag the one-pixel divider to resize; its transparent grab area is wider than the line. Both panes retain at least 80 logical pixels where window size permits. The split proportion survives hide/show and maximise/restore within the window, but is not saved across app restarts. A compact tab strip provides selection, new-tab and close buttons. Inactive native surfaces are hidden while their event loops and shells remain alive. Cmd+D splits the focused pane to the right; Cmd+Shift+D splits it below. Each split has its own tabs. No search UI or persisted terminal sessions yet. Ghostty application actions such as new windows, tabs and settings are not wired to Zvim.
+- Multiple terminal panes with independent shell tabs, in a dock initially at 40% height. Drag the one-pixel divider to resize; its transparent grab area is wider than the line. Both panes retain at least 80 logical pixels where window size permits. The split proportion survives hide/show and maximise/restore; enabling Remember terminal layouts also saves it across app restarts. A compact tab strip provides selection, new-tab and close buttons. Inactive native surfaces are hidden while their event loops and shells remain alive. Cmd+D splits the focused pane to the right; Cmd+Shift+D splits it below. Each split has its own tabs. Scrollback search and optional project layout persistence are described below. Ghostty application actions such as new windows, tabs and settings are not wired to Zvim.
 - The adapter handles key presses/releases, repeats, modifier keys, mouse input, selection, scrolling and clipboard. It does not implement a terminal IME composition interface; dead keys and CJK composition need further work. GPUI's abstract keys also lose some physical-key/keypad distinctions.
 - macOS Option-generated characters, such as `#` from Option+3 on the British layout, consume the Option modifier when sent to Ghostty. This preserves text input when the shell or terminal application enables the Kitty keyboard protocol.
 - Ghostty's protected clipboard requests are denied when the embedder cannot obtain approval. Ordinary copy/paste follows Ghostty configuration; unsafe/multiline pastes can be refused. No clipboard approval UI is provided yet.
@@ -62,3 +62,62 @@ Enable **Settings → General → Focus follows mouse** to focus visible termina
 Cmd+F (Linux: Ctrl+Shift+F) opens a compact search bar for the focused terminal tab. Ghostty performs the search asynchronously and renders match highlights directly in its native surface. The bridge forwards search totals and selected-match events; it does not copy scrollback into GPUI. Enter/Shift+Enter and the arrow buttons navigate, Escape returns focus to the terminal. Search bars take 28 pixels above the native child so the child cannot obscure controls. Queries use the GPUI text input protocol, including UTF-16 ranges for composition. Search and match navigation shortcuts are reserved against terminal shortcut overrides.
 
 Cmd+Shift+Up makes the terminal dock 40 logical pixels taller; Cmd+Shift+Down makes it 40 pixels shorter. These shortcuts apply while a terminal is focused and the dock is visible alongside the editor. They use the same minimum sizes as mouse dragging, do nothing while maximised, and can be changed in Settings → Keybindings.
+
+## Project terminal workspaces
+
+Enable **Settings → General → Remember terminal layouts** to try project-specific
+native terminals. It is off by default and can be enabled in an existing window.
+The project bar names the active terminal workspace and counts background shells.
+
+Each project keeps its own pane tree, split ratios, dock height, tabs, selected tab
+and focused pane, and hidden/maximised state. A → B → A in one Neovim window returns
+to the same live shells and running commands. Hidden project shells continue
+receiving events and exiting shells are cleaned up. Window close and Quit check
+all project workspaces, including hidden shells, before closing them. If Neovim
+exits and you choose Keep Terminal, the project bar lets you reach other retained
+project terminals.
+
+On relaunch, layouts are restored when their project is first opened in a window.
+Restoration starts fresh login shells; running programs, scrollback and editor
+sessions are not persisted. A shell's directory is tracked from Ghostty's working
+directory notifications (normally supplied by shell integration / OSC 7). Without
+those notifications, restoration uses that shell's initial directory. If a saved
+directory has disappeared, the shell starts in its project root and Zvim shows a
+notice. Invalid layouts are reported and rejected before spawning any shells.
+
+By default the project root follows Neovim's **global** working directory.
+Window-local `:lcd`, tab-local `:tcd`, and `autochdir` events do not switch projects.
+Directory changes during session loading are coalesced before notifying Zvim.
+For plugins with another definition of a project, call the generic bridge after
+successfully switching the editor session:
+
+```lua
+if vim.g.zvim then
+  require("zvim").set_project(project_root)
+end
+```
+
+This reports an explicit project root without changing Neovim's directory or
+session. The explicit root remains selected until the plugin reports another one.
+Use `require("zvim").set_project(nil)` to resume following global directory changes.
+`:ZvimProject /path/to/project` provides the same explicit selection interactively;
+`:ZvimProject` selects the current global directory. Project roots must exist and
+are canonicalised, so symlink aliases share a saved layout.
+
+Layouts are private, versioned JSON files in `terminal-layouts/` beside
+`preferences.json`. Saves are atomic and run on a background writer that is flushed
+on normal quit. Each project has its own file, so saving another window's project
+cannot discard its layout. Two windows on the same project have independent live
+shells; the last layout saved for that project is used on the next launch.
+Turning the setting off stops saving and loading layouts. Already running project
+workspaces remain available through project switching until that window closes.
+`--clean` windows do not restore or save project terminal workspaces.
+
+The isolated native regression opens its own windows, projects, editor state and
+shells without changing the user's preferences:
+
+```sh
+cargo build --locked --example project_terminals
+python3 scripts/bundle-ghostty.py
+SHELL=/bin/sh target/debug/examples/project_terminals
+```

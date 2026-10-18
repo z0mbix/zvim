@@ -30,6 +30,7 @@ typedef struct zvim_ghostty_surface {
     zvim_ghostty_wakeup_cb wakeup;
     zvim_ghostty_approve_clipboard_cb approve_clipboard;
     _Atomic bool alive;
+    char *working_directory;
     intptr_t search_total;
     intptr_t search_selected;
 } zvim_ghostty_surface;
@@ -43,6 +44,17 @@ static bool runtime_action(ghostty_app_t app, ghostty_target_s target, ghostty_a
     (void)app;
     if (target.tag == GHOSTTY_TARGET_SURFACE && target.target.surface != NULL) {
         zvim_ghostty_surface *search = ghostty_surface_userdata(target.target.surface);
+        if (search != NULL && action.tag == GHOSTTY_ACTION_PWD) {
+            const char *pwd = action.action.pwd.pwd;
+            if (pwd != NULL && pwd[0] == '/') {
+                char *copy = strdup(pwd);
+                if (copy != NULL) {
+                    free(search->working_directory);
+                    search->working_directory = copy;
+                }
+            }
+            return true;
+        }
         if (search != NULL && action.tag == GHOSTTY_ACTION_SEARCH_TOTAL) {
             search->search_total = action.action.search_total.total;
             return true;
@@ -203,6 +215,7 @@ fail:
     if (state->config != NULL) ghostty_config_free(state->config);
     [state->view removeFromSuperview];
     [state->view release];
+    free(state->working_directory);
     free(state);
     return NULL;
 }
@@ -214,6 +227,7 @@ void zvim_ghostty_surface_free(zvim_ghostty_surface *state) {
     if (state->app != NULL) ghostty_app_free(state->app);
     if (state->config != NULL) ghostty_config_free(state->config);
     [state->view release];
+    free(state->working_directory);
     free(state);
 }
 
@@ -401,4 +415,9 @@ bool zvim_ghostty_surface_binding_action(zvim_ghostty_surface *state, const char
 void zvim_ghostty_surface_search_status(zvim_ghostty_surface *state, intptr_t *total, intptr_t *selected) {
     *total = state->search_total;
     *selected = state->search_selected;
+}
+
+// Borrowed until the next tick or teardown; callers copy on the owning UI thread.
+const char *zvim_ghostty_surface_working_directory(const zvim_ghostty_surface *state) {
+    return state != NULL ? state->working_directory : NULL;
 }

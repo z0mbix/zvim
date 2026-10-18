@@ -18,6 +18,8 @@ pub mod terminal_tabs;
 
 pub mod terminal_layout;
 
+pub mod terminal_workspace;
+
 pub mod text_cache;
 
 pub mod geometry_writer;

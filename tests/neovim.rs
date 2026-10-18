@@ -444,3 +444,100 @@ fn cancelling_gui_close_reports_completion_and_keeps_unsaved_editor_alive() {
     assert_eq!(eval(&s, "&modified"), 1.into());
     s.rpc.send("nvim_command", vec!["qa!".into()]);
 }
+
+#[test]
+fn project_notifications_distinguish_local_directories_and_explicit_roots() {
+    let temporary = tempfile::tempdir().unwrap();
+    let a = temporary.path().join("project a 'quoted'");
+    let b = temporary.path().join("project b");
+    let local = a.join("nested");
+    std::fs::create_dir_all(&local).unwrap();
+    std::fs::create_dir(&b).unwrap();
+    let a = a.canonicalize().unwrap();
+    let b = b.canonicalize().unwrap();
+    let s = Session::spawn(&Launch {
+        clean: true,
+        working_directory: Some(a.clone()),
+        state_directory: Some(temporary.path().join("editor-state")),
+        ..Default::default()
+    })
+    .unwrap();
+    s.initialize(80, 24).unwrap();
+    let next_project = || {
+        let start = Instant::now();
+        loop {
+            if let Ok(Event::Project(root)) = s.events.try_recv() {
+                return root;
+            }
+            assert!(
+                start.elapsed() < Duration::from_secs(5),
+                "project notification missing"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    };
+    assert_eq!(next_project(), a);
+    let lua = |code: &str, args: Vec<Value>| {
+        s.rpc
+            .request("nvim_exec_lua", vec![code.into(), Value::Array(args)])
+            .unwrap()
+    };
+    lua(
+        "vim.cmd.lcd(vim.fn.fnameescape(...)); vim.wait(60)",
+        vec![local.to_str().unwrap().into()],
+    );
+    while let Ok(event) = s.events.try_recv() {
+        assert!(
+            !matches!(event, Event::Project(_)),
+            "lcd must not change project"
+        );
+    }
+    lua(
+        "vim.cmd.cd(vim.fn.fnameescape(...))",
+        vec![b.to_str().unwrap().into()],
+    );
+    assert_eq!(next_project(), b);
+    lua(
+        "require('zvim').set_project(...)",
+        vec![a.to_str().unwrap().into()],
+    );
+    assert_eq!(next_project(), a);
+    lua(
+        "vim.cmd.cd(vim.fn.fnameescape(...)); vim.wait(60)",
+        vec![b.to_str().unwrap().into()],
+    );
+    while let Ok(event) = s.events.try_recv() {
+        assert!(
+            !matches!(event, Event::Project(_)),
+            "explicit root must survive directory changes"
+        );
+    }
+    lua("require('zvim').set_project(nil)", vec![]);
+    assert_eq!(next_project(), b);
+    lua(
+        "vim.cmd.cd(vim.fn.fnameescape(...)); vim.cmd.ZvimTerminal()",
+        vec![a.to_str().unwrap().into()],
+    );
+    assert_eq!(next_project(), a);
+    let start = Instant::now();
+    loop {
+        if let Ok(Event::Terminal(cwd)) = s.events.try_recv() {
+            assert_eq!(cwd, a);
+            break;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "project identity must arrive before a terminal request in the same Neovim turn"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(
+        lua(
+            "return {pcall(require('zvim').set_project, '/missing-zvim-project')}",
+            vec![]
+        )
+        .as_array()
+        .unwrap()[0],
+        false.into()
+    );
+}

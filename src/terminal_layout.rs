@@ -1,6 +1,7 @@
 use crate::terminal_tabs::TerminalTabs;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Axis {
     Horizontal,
     Vertical,
@@ -30,6 +31,7 @@ pub struct Divider {
     pub rect: Rect,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 enum Node {
     Pane(u64),
     Split {
@@ -49,6 +51,94 @@ pub struct TerminalLayout<T> {
     next_terminal_id: u64,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SavedLayout<T> {
+    root: Option<Node>,
+    panes: Vec<SavedPane<T>>,
+    focused: Option<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+struct SavedPane<T> {
+    id: u64,
+    tabs: Vec<(u64, T)>,
+    active: usize,
+}
+
+impl<T> SavedLayout<T> {
+    /// Validate all topology before a caller starts any restored shell.
+    pub fn validate(&self) -> anyhow::Result<()> {
+        use std::collections::HashSet;
+        anyhow::ensure!(self.panes.len() <= 32, "Too many saved terminal panes");
+        let mut panes = HashSet::new();
+        let mut tabs = HashSet::new();
+        for pane in &self.panes {
+            anyhow::ensure!(
+                pane.id > 0 && pane.id < u64::MAX / 2 && panes.insert(pane.id),
+                "Invalid saved pane ID"
+            );
+            anyhow::ensure!(
+                !pane.tabs.is_empty() && pane.active < pane.tabs.len(),
+                "Invalid saved tab selection"
+            );
+            for (id, _) in &pane.tabs {
+                anyhow::ensure!(
+                    *id > 0 && *id < u64::MAX / 2 && tabs.insert(*id),
+                    "Invalid saved terminal ID"
+                );
+            }
+        }
+        anyhow::ensure!(tabs.len() <= 128, "Too many saved terminal tabs");
+        let mut nodes = HashSet::new();
+        fn visit(
+            node: &Node,
+            panes: &mut HashSet<u64>,
+            nodes: &mut HashSet<u64>,
+            depth: usize,
+        ) -> anyhow::Result<()> {
+            anyhow::ensure!(depth <= 16, "Saved terminal layout is too deep");
+            let id = match node {
+                Node::Pane(id) | Node::Split { id, .. } => *id,
+            };
+            anyhow::ensure!(
+                id > 0 && id < u64::MAX / 2 && nodes.insert(id),
+                "Duplicate saved layout node"
+            );
+            match node {
+                Node::Pane(id) => anyhow::ensure!(panes.remove(id), "Missing saved terminal pane"),
+                Node::Split {
+                    ratio,
+                    first,
+                    second,
+                    ..
+                } => {
+                    anyhow::ensure!(
+                        ratio.is_finite() && *ratio > 0. && *ratio < 1.,
+                        "Invalid saved split ratio"
+                    );
+                    visit(first, panes, nodes, depth + 1)?;
+                    visit(second, panes, nodes, depth + 1)?;
+                }
+            }
+            Ok(())
+        }
+        if let Some(root) = &self.root {
+            anyhow::ensure!(
+                self.focused.is_some_and(|id| panes.contains(&id)),
+                "Missing saved terminal focus"
+            );
+            visit(root, &mut panes, &mut nodes, 0)?;
+            anyhow::ensure!(panes.is_empty(), "Unreferenced saved terminal panes");
+        } else {
+            anyhow::ensure!(
+                panes.is_empty() && self.focused.is_none(),
+                "Missing saved terminal layout"
+            );
+        }
+        Ok(())
+    }
+}
+
 impl<T> Default for TerminalLayout<T> {
     fn default() -> Self {
         Self {
@@ -62,6 +152,58 @@ impl<T> Default for TerminalLayout<T> {
 }
 
 impl<T> TerminalLayout<T> {
+    pub fn snapshot<U>(&self, mut save: impl FnMut(&T) -> U) -> SavedLayout<U> {
+        SavedLayout {
+            root: self.root.clone(),
+            panes: self
+                .panes
+                .iter()
+                .map(|(id, tabs)| SavedPane {
+                    id: *id,
+                    tabs: tabs.iter().map(|(id, value)| (*id, save(value))).collect(),
+                    active: tabs.active_index(),
+                })
+                .collect(),
+            focused: self.focused,
+        }
+    }
+
+    pub fn restore<U>(
+        saved: SavedLayout<U>,
+        mut spawn: impl FnMut(U) -> anyhow::Result<T>,
+    ) -> anyhow::Result<Self> {
+        saved.validate()?;
+        let mut next_id = 1;
+        fn max_id(node: &Node) -> u64 {
+            match node {
+                Node::Pane(id) => *id,
+                Node::Split {
+                    id, first, second, ..
+                } => (*id).max(max_id(first)).max(max_id(second)),
+            }
+        }
+        if let Some(root) = &saved.root {
+            next_id = max_id(root) + 1;
+        }
+        let mut next_terminal_id = 1;
+        let mut panes = Vec::new();
+        for pane in saved.panes {
+            let mut entries = Vec::new();
+            for (id, value) in pane.tabs {
+                next_terminal_id = next_terminal_id.max(id + 1);
+                entries.push((id, spawn(value)?));
+            }
+            panes.push((pane.id, TerminalTabs::from_saved(entries, pane.active)));
+        }
+        Ok(Self {
+            panes,
+            root: saved.root,
+            focused: saved.focused,
+            next_id,
+            next_terminal_id,
+        })
+    }
+
     fn id(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
@@ -592,5 +734,55 @@ mod tests {
         l.select(0);
         assert!(!l.visible_ids(false).contains(&new_tab));
         assert!(!l.focus_terminal(new_tab));
+    }
+}
+
+#[cfg(test)]
+mod persistence_tests {
+    use super::*;
+
+    #[test]
+    fn saved_layout_restores_nested_splits_selection_and_stable_ids() {
+        let mut layout = TerminalLayout::default();
+        layout.push("first".to_owned());
+        let left = layout.focused_pane().unwrap();
+        layout.push("second".to_owned());
+        layout.select(0);
+        layout.split(left, Axis::Horizontal, "right".to_owned());
+        let right = layout.focused_pane().unwrap();
+        layout.split(right, Axis::Vertical, "below".to_owned());
+        let divider = layout.layout(900., 600., false).1[0].id;
+        layout.resize(divider, 0.35);
+        layout.focus_pane(left);
+        let saved = layout.snapshot(Clone::clone);
+        let bytes = serde_json::to_vec(&saved).unwrap();
+        let decoded: SavedLayout<String> = serde_json::from_slice(&bytes).unwrap();
+        let mut restored = TerminalLayout::restore(decoded, Ok).unwrap();
+        assert_eq!(restored.snapshot(Clone::clone), saved);
+        assert_eq!(restored.active().map(String::as_str), Some("first"));
+        let max = restored.iter().map(|(id, _)| *id).max().unwrap();
+        assert!(restored.push("new".into()) > max);
+    }
+
+    #[test]
+    fn corrupt_topology_is_rejected_before_starting_any_shell() {
+        let mut layout = TerminalLayout::default();
+        layout.push(1);
+        let saved = layout.snapshot(|value| *value);
+        for mutation in 0..4 {
+            let mut bad = saved.clone();
+            match mutation {
+                0 => bad.panes[0].active = 100,
+                1 => bad.root = Some(Node::Pane(999)),
+                2 => bad.panes[0].tabs[0].0 = u64::MAX - 1,
+                _ => {
+                    let tab = bad.panes[0].tabs[0];
+                    bad.panes[0].tabs.push(tab);
+                }
+            }
+            let result: anyhow::Result<TerminalLayout<i32>> =
+                TerminalLayout::restore(bad, |_| panic!("must validate before spawning"));
+            assert!(result.is_err());
+        }
     }
 }

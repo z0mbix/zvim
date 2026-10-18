@@ -47,6 +47,7 @@ unsafe extern "C" {
     fn zvim_ghostty_surface_linux_tick(surface: *mut RawSurface);
     fn zvim_ghostty_surface_linux_needs_confirm_quit(surface: *const RawSurface) -> bool;
     fn zvim_ghostty_surface_linux_is_alive(surface: *const RawSurface) -> bool;
+    fn zvim_ghostty_surface_linux_working_directory(surface: *const RawSurface) -> *const c_char;
     fn zvim_ghostty_surface_linux_snapshot(
         surface: *mut RawSurface,
         pixels: *mut *mut u8,
@@ -212,6 +213,17 @@ impl NativeSurface {
     pub fn needs_confirm_quit(&self) -> bool {
         // SAFETY: raw remains owned by this surface on its UI thread.
         unsafe { zvim_ghostty_surface_linux_needs_confirm_quit(self.raw.as_ptr()) }
+    }
+
+    pub fn working_directory(&self) -> Option<&std::path::Path> {
+        use std::os::unix::ffi::OsStrExt;
+        // SAFETY: The shim's string is borrowed from this surface on its UI thread.
+        let pointer = unsafe { zvim_ghostty_surface_linux_working_directory(self.raw.as_ptr()) };
+        if pointer.is_null() {
+            return None;
+        }
+        let bytes = unsafe { std::ffi::CStr::from_ptr(pointer) }.to_bytes();
+        Some(std::path::Path::new(std::ffi::OsStr::from_bytes(bytes)))
     }
 
     pub fn is_alive(&self) -> bool {

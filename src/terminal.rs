@@ -17,6 +17,7 @@ actions!(terminal_search, [Find, NextMatch, PreviousMatch]);
 /// A GPUI entity backed by Ghostty's native Metal or Wayland/OpenGL surface.
 pub struct Terminal {
     surface: NativeSurface,
+    working_directory: std::path::PathBuf,
     search: Option<crate::terminal_search::Search>,
     search_focus: FocusHandle,
     applied_theme: Option<std::sync::Arc<str>>,
@@ -29,6 +30,10 @@ pub struct Terminal {
     window_focused: bool,
     _subscriptions: Vec<Subscription>,
 }
+
+pub struct TerminalDirectoryChanged;
+
+impl gpui::EventEmitter<TerminalDirectoryChanged> for Terminal {}
 
 pub struct TerminalExited;
 
@@ -45,6 +50,7 @@ impl Terminal {
         window: &mut Window,
         cx: &mut Context<T>,
     ) -> Result<Entity<Self>, String> {
+        let working_directory = options.working_directory.clone();
         let focus_on_spawn = options.focus_on_spawn;
         // SAFETY: GPUI owns the parent window; this entity services and drops
         // its native child on the window's UI thread, as in the native adapter.
@@ -74,6 +80,7 @@ impl Terminal {
             ];
             let mut terminal = Self {
                 surface,
+                working_directory,
                 search: None,
                 search_focus: cx.focus_handle(),
                 applied_theme: None,
@@ -87,6 +94,7 @@ impl Terminal {
                 _subscriptions: subscriptions,
             };
             terminal.sync_focus(window);
+            terminal.start_ticking(cx);
             terminal
         }))
     }
@@ -101,6 +109,10 @@ impl Terminal {
 
     pub fn needs_confirm_quit(&self) -> bool {
         self.is_alive() && self.surface.needs_confirm_quit()
+    }
+
+    pub fn working_directory(&self) -> &std::path::Path {
+        &self.working_directory
     }
 
     pub fn is_alive(&self) -> bool {
@@ -159,12 +171,10 @@ impl Terminal {
         if self.tick_task.is_some() {
             return;
         }
-        self.tick(cx);
         let wakeup = self.surface.wakeup();
         let terminal = cx.entity().downgrade();
         self.tick_task = Some(cx.spawn(async move |_, cx| {
             loop {
-                wakeup.wait().await;
                 let updated = terminal.update(cx, |terminal, cx| {
                     // Ghostty draws its native child during the tick; GPUI has no
                     // terminal pixels to repaint for this wakeup.
@@ -173,12 +183,19 @@ impl Terminal {
                 if updated.is_err() {
                     break;
                 }
+                wakeup.wait().await;
             }
         }));
     }
 
     fn tick(&mut self, cx: &mut Context<Self>) {
         self.surface.tick();
+        if let Some(directory) = self.surface.working_directory()
+            && directory != self.working_directory.as_path()
+        {
+            self.working_directory = directory.to_owned();
+            cx.emit(TerminalDirectoryChanged);
+        }
         self.service_clipboard(cx);
         if let Some(search) = &mut self.search {
             let status = self.surface.search_status();
@@ -428,6 +445,7 @@ pub fn configure_resources() {
         dir.join("../Resources/ghostty"),
         dir.join("share/ghostty"),
         dir.join("../ghostty-resources/ghostty"),
+        dir.join("../../ghostty-resources/ghostty"),
     ];
     if let Some(path) = candidates
         .into_iter()

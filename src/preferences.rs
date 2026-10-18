@@ -287,7 +287,7 @@ enum SettingsTab {
     Keybindings,
 }
 
-const GENERAL_TAB_BUTTON: usize = 12 + APP_ICONS.len() + TerminalShortcut::ALL.len();
+const GENERAL_TAB_BUTTON: usize = 13 + APP_ICONS.len() + TerminalShortcut::ALL.len();
 const KEYBINDINGS_TAB_BUTTON: usize = GENERAL_TAB_BUTTON + 1;
 
 #[derive(Clone, Copy)]
@@ -298,6 +298,7 @@ enum Choice {
     FocusFollowsMouse,
     Sync,
     TerminalTheme,
+    TerminalLayouts,
     Diagnostics,
     CliDirectory,
     CliDefault,
@@ -471,6 +472,9 @@ impl PreferencesView {
                 Choice::Icon(id) => p.app_icon = id.into(),
                 Choice::FocusFollowsMouse => p.focus_follows_mouse = !p.focus_follows_mouse,
                 Choice::Geometry => p.remember_window_geometry = !p.remember_window_geometry,
+                Choice::TerminalLayouts => {
+                    p.remember_terminal_layouts = !p.remember_terminal_layouts
+                }
                 Choice::TerminalTheme => p.terminal_follow_neovim = !p.terminal_follow_neovim,
                 Choice::Sync => p.sync_editor_appearance = !p.sync_editor_appearance,
                 Choice::Diagnostics
@@ -705,26 +709,31 @@ impl Render for PreferencesView {
                     .child(self.toggle(6,p.focus_follows_mouse,Choice::FocusFollowsMouse,d,cx)))
                 .child(div().text_color(muted).child("Move the pointer into editor or terminal content to focus that pane. Selection, resizing and dialogs keep their focus.")))
             .child(div().flex().flex_col().gap_2()
+                .child(div().flex().items_center().justify_between().gap_4()
+                    .child(div().font_weight(FontWeight::SEMIBOLD).child("Remember terminal layouts"))
+                    .child(self.toggle(7,p.remember_terminal_layouts,Choice::TerminalLayouts,d,cx)))
+                .child(div().text_color(muted).child("Save panes, tabs and directories per project. Switching projects keeps other shells running; relaunching starts fresh shells. Turning this off stops saving and restoring; existing project terminals remain available until the window closes.")))
+            .child(div().flex().flex_col().gap_2()
                 .child(div().font_weight(FontWeight::SEMIBOLD).child("Application icon"))
                 .child(div().flex().items_center().gap_4()
                     .child(img(self.icon_images[resolve(&p.app_icon).id].clone())
                         .w(px(40.)).h(px(40.)))
                     .children(APP_ICONS.iter().enumerate().map(|(i, icon)|
-                        self.button(7+i, icon.label, resolve(&p.app_icon).id == icon.id, Choice::Icon(icon.id), d, cx))))
+                        self.button(8+i, icon.label, resolve(&p.app_icon).id == icon.id, Choice::Icon(icon.id), d, cx))))
                 .child(div().text_color(muted).child("The Neovim icon is included in this build. More icon choices can be added in future releases.")))
             .child(div().flex().flex_col().gap_2()
                 .child(div().font_weight(FontWeight::SEMIBOLD).child("Command-line launcher"))
                 .child(div().text_color(muted).child("Install the zvim command for this app. No Python or additional tools are needed."))
                 .child(div().child(format!("Bin directory: {}", p.cli_bin_directory.display())))
                 .child(div().flex().flex_wrap().gap_2()
-                    .child(self.button(7+APP_ICONS.len(), "Choose folder…", false, Choice::CliDirectory, d, cx))
-                    .child(self.button(8+APP_ICONS.len(), "Use default", false, Choice::CliDefault, d, cx))
-                    .child(self.button(9+APP_ICONS.len(), if self.cli_installing {"Installing…"} else {"Install / update zvim"}, false, Choice::CliInstall, d, cx)))
+                    .child(self.button(8+APP_ICONS.len(), "Choose folder…", false, Choice::CliDirectory, d, cx))
+                    .child(self.button(9+APP_ICONS.len(), "Use default", false, Choice::CliDefault, d, cx))
+                    .child(self.button(10+APP_ICONS.len(), if self.cli_installing {"Installing…"} else {"Install / update zvim"}, false, Choice::CliInstall, d, cx)))
                 .child(div().text_color(muted).child("Choose a writable folder on your shell’s PATH. The default is ~/.local/bin; it will be created if needed. If you move the app, install the command again. Changing folders leaves any previous launcher in place."))
                 .when_some(self.cli_message.clone(), |d, message| d.child(div().child(message))))
             .child(div().flex().flex_col().gap_2()
                 .child(div().font_weight(FontWeight::SEMIBOLD).child("Troubleshooting"))
-                .child(div().flex().child(self.button(10+APP_ICONS.len(),"Open diagnostics folder",false,Choice::Diagnostics,d,cx))))
+                .child(div().flex().child(self.button(11+APP_ICONS.len(),"Open diagnostics folder",false,Choice::Diagnostics,d,cx))))
                 ))
                 .when(self.tab == SettingsTab::Keybindings, |page| page.child(
                     div().id("keybinding-settings").size_full().overflow_y_scroll().flex().flex_col().gap_4()
@@ -733,8 +742,8 @@ impl Render for PreferencesView {
                 .children(TerminalShortcut::ALL.into_iter().enumerate().map(|(i, shortcut)|
                     div().flex().items_center().justify_between().gap_4()
                         .child(format!("{}: {}", shortcut.label(), shortcut.key(&p)))
-                        .child(self.button(11+APP_ICONS.len()+i, if self.recording_shortcut == Some(shortcut) {"Press shortcut…"} else {"Change"}, false, Choice::RecordShortcut(shortcut), d, cx))))
-                .child(div().flex().child(self.button(11+APP_ICONS.len()+TerminalShortcut::ALL.len(), "Reset shortcuts", false, Choice::ResetShortcuts, d, cx)))
+                        .child(self.button(12+APP_ICONS.len()+i, if self.recording_shortcut == Some(shortcut) {"Press shortcut…"} else {"Change"}, false, Choice::RecordShortcut(shortcut), d, cx))))
+                .child(div().flex().child(self.button(12+APP_ICONS.len()+TerminalShortcut::ALL.len(), "Reset shortcuts", false, Choice::ResetShortcuts, d, cx)))
                 .child(div().text_color(muted).child("Defaults match your Zed terminal keys. Click Change, then press a shortcut; Escape cancels. Tab, split and pane-navigation shortcuts apply while the terminal is focused. Cmd+1–9 selects a tab in the focused pane.")))
                 )))
             .child(div().text_sm().flex_shrink_0().text_color(muted).child("Changes save automatically. Fonts, plugins and editing preferences stay in your Neovim configuration."))

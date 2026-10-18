@@ -15,6 +15,7 @@ use std::{
 };
 
 pub enum Event {
+    Project(PathBuf),
     Terminal(PathBuf),
     NewTerminal(PathBuf),
     TerminalTheme(crate::terminal_theme::TerminalTheme),
@@ -350,6 +351,14 @@ impl Session {
                             Some("zvim_close_returned") => {
                                 let _ = reader_events.send_blocking(Event::CloseReturned);
                             }
+                            Some("zvim_project") => {
+                                if let Some(root) = args.first().and_then(Value::as_str) {
+                                    let root = PathBuf::from(root);
+                                    if root.is_absolute() {
+                                        let _ = reader_events.send_blocking(Event::Project(root));
+                                    }
+                                }
+                            }
                             Some(name @ ("zvim_terminal" | "zvim_new_terminal")) => {
                                 if let Some(cwd) = args.first().and_then(Value::as_str) {
                                     let _ = reader_events.send_blocking(
@@ -470,7 +479,7 @@ impl Session {
         self.rpc.send(
             "nvim_exec_lua",
             vec![
-                "vim.rpcnotify(vim.g.zvim_channel, 'zvim_new_terminal', vim.fn.getcwd())".into(),
+                "if _G.__zvim_project_refresh then _G.__zvim_project_refresh() end; vim.rpcnotify(vim.g.zvim_channel, 'zvim_new_terminal', vim.fn.getcwd())".into(),
                 Value::Array(vec![]),
             ],
         );
@@ -574,8 +583,15 @@ pub fn initialize(rpc: &Rpc, width: u64, height: u64) -> Result<()> {
         ],
     )?;
     crate::startup::mark("ui_attach_begin");
+    rpc.request(
+        "nvim_exec_lua",
+        vec![
+            include_str!("project.lua").into(),
+            Value::Array(vec![channel.into()]),
+        ],
+    )?;
     rpc.request("nvim_exec_lua", vec![
-        "local channel = ...; vim.g.zvim_channel = channel; vim.api.nvim_create_user_command('ZvimTerminal', function() vim.rpcnotify(channel, 'zvim_terminal', vim.fn.getcwd()) end, {desc='Toggle Zvim native terminal'})".into(),
+        "local channel = ...; vim.g.zvim_channel = channel; vim.api.nvim_create_user_command('ZvimTerminal', function() _G.__zvim_project_refresh(); vim.rpcnotify(channel, 'zvim_terminal', vim.fn.getcwd()) end, {desc='Toggle Zvim native terminal'})".into(),
         Value::Array(vec![channel.into()]),
     ])?;
     rpc.request(
