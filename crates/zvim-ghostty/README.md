@@ -1,11 +1,11 @@
 # Zvim native Ghostty bridge
 
-This is the Rust native wrapper and platform shims from `gpui-libghostty`
+The Rust native wrapper and platform shims originated in `gpui-libghostty`
 revision `bfa3771f0ef2290e54acf9f1fc11e05d42a882ee`, under its MIT licence.
-The matching `ghostty.h` is from its vendored Ghostty revision
-`9f0e1719dc918368367d368bfe300f59bb68b5a4` (MIT; see `GHOSTTY-LICENSE`).
-
-The upstream Cargo dependency still builds and links the pinned Ghostty engine.
+The clipboard callbacks and helper are adapted from revision
+`5afeb517e3090c0c1d1701c15556c8e3ca27d612` to match the Ghostty 1.4 C API.
+The `ghostty.h` here matches the patched header that revision uses to build
+and link the native engine (MIT, see `GHOSTTY-LICENSE`).
 Only the small embedding layer is copied here, avoiding a second copy of the
 Ghostty source or changes to Cargo's dependency checkout. Native shim symbols and
 the AppKit view class use a Zvim prefix to avoid collisions with upstream.

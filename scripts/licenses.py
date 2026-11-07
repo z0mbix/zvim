@@ -19,8 +19,6 @@ def collect(destination):
             if file.exists() and file not in files: files.append(file)
         if p['name'] == 'zvim-ghostty':
             files.append(folder/'GHOSTTY-LICENSE')
-        if p['name'] == 'gpui-libghostty':
-            files += list((folder/'vendor/ghostty').rglob('LICENSE*'))
         if files:
             out.mkdir(exist_ok=True)
             for f in files:

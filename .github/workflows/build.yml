@@ -19,12 +19,9 @@ jobs:
   validate:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.98.1
       - name: Check release version
         if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
         env:
@@ -47,26 +44,42 @@ jobs:
             target: linux-x86_64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.98.1
-          components: rustfmt, clippy
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: '3.12'
+      - name: Read toolchain pins from the checked-out ref
+        id: toolchains
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          rust_pin = Path('rust-toolchain.toml')
+          zig_pin = Path('.config/mise.toml')
+          # Tags created before the toolchain files used these versions.
+          rust = tomllib.loads(rust_pin.read_text())['toolchain']['channel'] if rust_pin.exists() else '1.98.1'
+          zig = tomllib.loads(zig_pin.read_text())['tools']['zig'] if zig_pin.exists() else '0.16.0'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print(f'rust={rust}', f'zig={zig}', sep='\n', file=output)
+          PY
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.toolchains.outputs.rust }}
+          components: rustfmt, clippy
       - name: Select Xcode SDK for Ghostty
         if: runner.os == 'macOS'
         run: sudo xcode-select --switch /Applications/Xcode_26.3.app/Contents/Developer
-      - uses: mlugg/setup-zig@v2
+      - uses: mlugg/setup-zig@v2.2.1
         with:
-          version: 0.16.0
+          version: ${{ steps.toolchains.outputs.zig }}
       - name: Linux development libraries
         if: runner.os == 'Linux'
         run: bash scripts/linux-dependencies.sh
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.9.3
         with:
           cache-on-failure: true
       - run: python scripts/test_package.py
@@ -76,7 +89,7 @@ jobs:
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo build --release --locked
       - run: python scripts/package.py --target ${{ matrix.target }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: zvim-${{ matrix.target }}
           path: |
@@ -93,10 +106,10 @@ jobs:
       release_tag: ${{ steps.publish.outputs.release_tag }}
       prerelease: ${{ steps.publish.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           pattern: zvim-macos-*
           path: release

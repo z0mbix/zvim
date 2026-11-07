@@ -5,7 +5,7 @@ use std::sync::Arc;
 pub enum ClipboardOperation {
     /// A paste rejected by Ghostty's unsafe-paste protection.
     Paste,
-    /// A terminal program requesting clipboard contents using OSC 52.
+    /// A terminal program requesting clipboard contents.
     Read,
     /// A terminal program writing the clipboard when configured to ask.
     Write,
@@ -24,5 +24,5 @@ pub struct ClipboardApproval<'a> {
 /// operations requiring confirmation invoke this policy; Ghostty's explicit
 /// `allow`/`deny` configuration continues to apply.
 ///
-/// Denied reads return an empty clipboard response; denied pastes insert nothing.
+/// Denied pastes insert no text and denied reads disclose no clipboard contents.
 pub type ClipboardApprovalCallback = Arc<dyn Fn(ClipboardApproval<'_>) -> bool + Send + Sync>;

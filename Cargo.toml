@@ -16,12 +16,13 @@ required-features = ["gui"]
 
 [dependencies]
 anyhow = "1"
-libc = "0.2"
+# GPUI's Linux xattr 0.2.3 still uses ENOATTR, removed in libc 0.2.190.
+libc = "=0.2.189"
 tempfile = "3.27"
 rmpv = "1.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 directories = "6"
 async-channel = "2"
 gpui = { version = "=0.2.2", features = ["runtime_shaders"], optional = true }

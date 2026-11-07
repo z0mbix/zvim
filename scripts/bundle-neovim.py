@@ -14,8 +14,11 @@ def bundle(target):
              'linux-x86_64': 'nvim-linux-x86_64.tar.gz'}
     if target not in names: raise SystemExit(f'Unsupported Zvim target: {target}')
     name = names[target]
-    spec = json.loads((ROOT / 'packaging/neovim.json').read_text())['assets'][name]
-    cache = ROOT / '.cache'; cache.mkdir(exist_ok=True)
+    manifest = json.loads((ROOT / 'packaging/neovim.json').read_text())
+    version = manifest['version']
+    spec = manifest['assets'][name]
+    cache = ROOT / '.cache' / f'neovim-{version}'
+    cache.mkdir(parents=True, exist_ok=True)
     archive = cache / name
     if not archive.exists():
         subprocess.run(['curl', '-fL', '--retry', '3', spec['url'], '-o', str(archive)], check=True)
@@ -33,7 +36,7 @@ def bundle(target):
         else: t.extractall(dest)
     unpacked = next(dest.iterdir())
     unpacked.rename(dest / 'neovim')
-    (dest / 'neovim' / 'ZVIM_BUNDLE_VERSION').write_text('0.12.5\n')
+    (dest / 'neovim' / 'ZVIM_BUNDLE_VERSION').write_text(f'{version}\n')
     print(dest / 'neovim')
     return dest / 'neovim'
 

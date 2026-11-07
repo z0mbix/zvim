@@ -34,7 +34,7 @@ mise trust .config/mise.toml
 mise install
 ```
 
-`.config/mise.toml` selects Zig 0.16.0 and reads Rust 1.98.1, rustfmt and Clippy
+`.config/mise.toml` selects Zig 0.17.1 and reads Rust 1.99.1, rustfmt and Clippy
 from `rust-toolchain.toml`. The `just` build recipes use `mise exec` automatically,
 so they work without activating mise in your shell and do not use Homebrew's Zig.
 For direct Cargo commands, use `mise exec -- cargo …`:
@@ -47,7 +47,7 @@ mise exec -- cargo run --locked -- --clean
 mise exec -- cargo run --locked -- path/to/file.rs
 ```
 
-The first command downloads Neovim 0.12.5 from its official release and verifies the SHA-256 in `packaging/neovim.json`. No system Neovim is required. The entire runtime is bundled, not just the executable.
+The first command downloads the official Neovim 0.12.6 archive and verifies its SHA-256 against `packaging/neovim.json`. Zvim bundles the executable and its full runtime.
 
 ```sh
 mise exec -- cargo build --release --locked

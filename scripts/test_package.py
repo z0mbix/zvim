@@ -11,6 +11,30 @@ package = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(package)
 
 
+class GhosttySourceTests(unittest.TestCase):
+    def test_only_the_locked_patched_inventory_matches(self):
+        ghostty = package.module('ghostty', package.ROOT / 'scripts/bundle-ghostty.py')
+        with tempfile.TemporaryDirectory() as temporary:
+            manifest = pathlib.Path(temporary) / 'dependency'
+            (manifest / 'upstream').mkdir(parents=True)
+            (manifest / 'patches/ghostty').mkdir(parents=True)
+            (manifest / 'upstream/files.sha256').write_text(
+                f"{'c' * 64}  src/shell-integration/zsh/.zshenv\n"
+                f"{'a' * 64}  build.zig\n")
+            (manifest / 'patches/ghostty/files.sha256').write_text(
+                f"{'b' * 64}  build.zig\n")
+            target = pathlib.Path(temporary) / 'target'
+            stale = target / 'debug/build/gpui-libghostty-old/out/ghostty-source/ghostty-patched-old'
+            stale.mkdir(parents=True)
+            with self.assertRaises(SystemExit):
+                ghostty.built_source(manifest, target)
+
+            digest = 'a1e4a376c187cc572bbd921448efb566de87ddd30b70968200e9500ac8dbd3ef'
+            source = target / 'release/build/gpui-libghostty-new/out/ghostty-source' / f'ghostty-patched-{digest}'
+            source.mkdir(parents=True)
+            self.assertEqual(ghostty.built_source(manifest, target), source)
+
+
 class ArchiveTests(unittest.TestCase):
     def test_zip_preserves_contents_with_pre_1980_timestamps(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -33,7 +33,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       RELEASE_TAG: ${{ inputs.release_tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - name: Validate published stable release
@@ -48,7 +48,7 @@ jobs:
           gh release download "$RELEASE_TAG" --dir release \
             --pattern "zvim-$RELEASE_TAG-macos-arm64.zip" --pattern SHA256SUMS.txt
       - name: Check out the tap with its dedicated deploy key
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           repository: z0mbix/homebrew-tap
           ref: main

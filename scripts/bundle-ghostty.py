@@ -1,7 +1,25 @@
 #!/usr/bin/env python3
 """Stage resources and native notices from the exact Ghostty dependency built by Cargo."""
-import json, os, pathlib, platform, re, shutil, subprocess
+import hashlib, json, os, pathlib, platform, re, shutil, subprocess
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+
+def built_source(manifest, target):
+    # gpui-libghostty keys its verified build tree by the sorted, patched
+    # file inventory. The digest selects the same source in any build profile.
+    inventory = {}
+    for checksums in (manifest / 'upstream/files.sha256',
+                      manifest / 'patches/ghostty/files.sha256'):
+        for line in checksums.read_text().splitlines():
+            digest, name = line.split('  ', 1)
+            inventory[name] = digest
+    encoded = json.dumps(inventory, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+    digest = hashlib.sha256(encoded.encode()).hexdigest()
+    trees = target.glob(f'*/build/gpui-libghostty-*/out/ghostty-source/ghostty-patched-{digest}')
+    source = next((tree for tree in trees if tree.is_dir()), None)
+    if source is None:
+        raise SystemExit('Ghostty source is missing. Run cargo build --locked first.')
+    return source
 
 
 def bundle():
@@ -11,19 +29,21 @@ def bundle():
         ['cargo', 'metadata', '--locked', '--offline', '--filter-platform', host,
          '--format-version', '1'], cwd=ROOT))
     package = next(p for p in metadata['packages'] if p['name'] == 'gpui-libghostty')
-    source = pathlib.Path(package['manifest_path']).parent / 'vendor/ghostty'
+    manifest = pathlib.Path(package['manifest_path']).parent
+    target = pathlib.Path(metadata['target_directory'])
+    source = built_source(manifest, target)
     cache_home = pathlib.Path(os.environ.get('XDG_CACHE_HOME') or
         (pathlib.Path.home() / ('Library/Caches' if platform.system() == 'Darwin' else '.cache')))
     caches = [pathlib.Path(os.environ[k]) for k in
               ('GHOSTTY_ZIG_SYSTEM_PACKAGE_DIR', 'GHOSTTY_ZIG_PACKAGE_CACHE_DIR') if os.environ.get(k)]
     caches += [cache_home / 'gpui-libghostty/zig-pkg',
-               pathlib.Path(metadata['target_directory']) / 'ghostty-zig-pkg']
+               target / 'ghostty-zig-pkg']
     zon = (source / 'build.zig.zon').read_text()
     theme_hash = re.search(r'\.iterm2_themes\s*=\s*\.\{.*?\.hash\s*=\s*"([^"]+)"', zon, re.S)[1]
     themes = next((cache / theme_hash for cache in caches if (cache / theme_hash).is_dir()), None)
     if themes is None:
         raise SystemExit('Ghostty resources are missing. Run cargo build --locked first, then this script with the same cache environment.')
-    dest = pathlib.Path(metadata['target_directory']) / 'ghostty-resources'
+    dest = target / 'ghostty-resources'
     if dest.exists(): shutil.rmtree(dest)
     resources = dest / 'ghostty'
     resources.mkdir(parents=True)
@@ -44,8 +64,8 @@ def bundle():
     notices(source, 'ghostty')
     # Include native build dependencies as well as linked libraries and embedded fonts.
     hashes = set()
-    for manifest in source.rglob('build.zig.zon'):
-        hashes.update(re.findall(r'\.hash\s*=\s*"([^"]+)"', manifest.read_text()))
+    for zig_manifest in source.rglob('build.zig.zon'):
+        hashes.update(re.findall(r'\.hash\s*=\s*"([^"]+)"', zig_manifest.read_text()))
     seen = set()
     while hashes:
         digest = hashes.pop()
@@ -54,9 +74,12 @@ def bundle():
         package_dir = next((cache / digest for cache in caches if (cache / digest).is_dir()), None)
         if package_dir is not None:
             notices(package_dir, digest)
-            for manifest in package_dir.rglob('build.zig.zon'):
-                hashes.update(re.findall(r'\.hash\s*=\s*"([^"]+)"', manifest.read_text()))
-    (licenses / 'SOURCE.txt').write_text('Cargo source: ' + package['source'] + '\n' + (source / 'VENDOR.md').read_text())
+            for zig_manifest in package_dir.rglob('build.zig.zon'):
+                hashes.update(re.findall(r'\.hash\s*=\s*"([^"]+)"', zig_manifest.read_text()))
+    (licenses / 'SOURCE.txt').write_text(
+        'Cargo source: ' + package['source'] + '\n'
+        + (manifest / 'upstream/ghostty.json').read_text() + '\n'
+        + (manifest / 'patches/ghostty/README.md').read_text())
     print(resources)
     return dest
 

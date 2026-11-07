@@ -4,6 +4,7 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
+    fmt::Write as _,
     io::{Read, Write},
     os::unix::{ffi::OsStrExt, fs::DirBuilderExt},
     path::{Path, PathBuf},
@@ -42,7 +43,12 @@ impl SavedWorkspace {
 
 fn filename(directory: &Path, project: &Path) -> PathBuf {
     let digest = Sha256::digest(project.as_os_str().as_bytes());
-    directory.join(format!("{digest:x}.json"))
+    let mut name = String::with_capacity(69);
+    for byte in digest {
+        write!(name, "{byte:02x}").expect("format workspace filename");
+    }
+    name.push_str(".json");
+    directory.join(name)
 }
 
 pub fn load_from(directory: &Path, project: &Path) -> Result<Option<SavedWorkspace>> {
@@ -178,6 +184,16 @@ mod tests {
             fraction: 0.6,
             maximized: false,
         }
+    }
+
+    #[test]
+    fn workspace_filename_matches_existing_layouts() {
+        assert_eq!(
+            filename(Path::new("/layouts"), Path::new("/old/project")),
+            Path::new(
+                "/layouts/a475e652686d0c46cdd1d4df2c58c66b29253ed28ac942a2e2aabb2ad505597f.json"
+            )
+        );
     }
 
     #[test]

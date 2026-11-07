@@ -1,5 +1,5 @@
 [tools]
-zig = "0.16.0"
+zig = "0.17.1"
 
 [settings]
 # Read Rust's version, profile, rustfmt and Clippy from rust-toolchain.toml.

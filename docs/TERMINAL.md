@@ -4,20 +4,20 @@ Zvim targets macOS and Linux. The terminal uses Ghostty's native Metal renderer 
 
 ## Build and packaging
 
-The pinned native renderer requires macOS 13 or newer and exactly Zig 0.16.0.
+The pinned native renderer requires macOS 13 or newer. Zvim builds it with Zig 0.17.1.
 Run `mise trust .config/mise.toml` and `mise install` to install the pinned Zig
 and Rust toolchains, including rustfmt and Clippy. `just` build recipes select
 these tools automatically. For direct builds, use `mise exec -- cargo build --locked`,
 then run `mise exec -- python3 scripts/bundle-ghostty.py`. `just run` stages resources automatically.
 `scripts/package.py` stages and ships themes, shell integration, the xterm-256color
 terminfo entry used by the native shim, and native dependency notices. The first
-native compilation downloads content-pinned Zig packages. Native build caches
+native compilation downloads the checksum-pinned Ghostty source and Zig packages. Native build caches
 follow gpui-libghostty's `GHOSTTY_*_CACHE_DIR` settings; preserve the same settings
 when packaging. No installed Ghostty application is needed.
 
-`gpui-libghostty` is pinned to bfa3771f0ef2290e54acf9f1fc11e05d42a882ee, including its patched Ghostty revision 9f0e1719dc918368367d368bfe300f59bb68b5a4. Zvim uses a local MIT-derived adapter for GPUI 0.2.2 and the small `crates/zvim-ghostty` bridge for live colour updates; the upstream dependency still builds the pinned native engine. The library's internal native wrapper is deliberately revision-pinned; upgrades require rebuilding and repeating interaction QA.
+`gpui-libghostty` 0.4.1-rc.1 builds the patched Ghostty 1.4.0 native engine. Zvim uses its own GPUI 0.2.2 adapter and `crates/zvim-ghostty` bridge for live colour updates. The bridge calls Ghostty's embedded `ghostty_app_*` and `ghostty_surface_*` APIs for native rendering and shell lifecycle. The separately released [libghostty-vt 1.0](https://github.com/ghostty-org/ghostty/releases/tag/vt-1.0.0) stabilises the C API for terminal emulation. Moving to it would require Zvim to provide the renderer and shell integration currently supplied by the native surface.
 
-On Ubuntu 24.04, `scripts/linux-dependencies.sh` installs the development libraries, including libc++ 21 from LLVM's APT repository. This script changes system package sources and is intended for CI or explicit developer setup. Linux requires a Wayland session and OpenGL 4.3. Current release archives remain macOS-only; Linux CI produces an experimental archive.
+On Ubuntu 24.04, `scripts/linux-dependencies.sh` installs the development libraries, including libc++ 22 from LLVM's APT repository. This script changes system package sources and is intended for CI or explicit developer setup. Linux requires a Wayland session and OpenGL 4.3. Current release archives remain macOS-only; Linux CI produces an experimental archive.
 
 ## Behaviour and limits
 
