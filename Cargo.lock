@@ -7376,7 +7376,7 @@ dependencies = [
 
 [[package]]
 name = "zvim"
-version = "0.0.12"
+version = "0.0.13"
 dependencies = [
  "anyhow",
  "async-channel 2.5.0",
